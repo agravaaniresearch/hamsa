@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hamsa settings</title>
+  <script src="../shared/theme-init.js"></script>
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="wrap">
+    <h1><img src="../icons/icon-48.png" alt="" width="28" height="28"> Hamsa settings</h1>
+
+    <section>
+      <h2>Providers</h2>
+      <p class="hint">Bring your own keys. Keys stay on this computer and are sent only to the provider you choose. Test a key to load its models, then tick the models you want in the sidebar.</p>
+      <div id="providers"></div>
+      <div class="row">
+        <select id="preset" aria-label="Provider preset"></select>
+        <button id="add-provider" class="btn">Add provider</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Interests from Raindrop</h2>
+      <p class="hint">Hamsa reads your bookmarks and tags once, builds a graph of what you care about, and ranks comments against it. Create a test token under Raindrop settings, Integrations, For developers. Saving points back to Raindrop needs the same token.</p>
+      <div class="row">
+        <input id="rd-token" type="password" placeholder="Raindrop test token" autocomplete="off" spellcheck="false">
+        <button id="rd-save" class="btn">Save token</button>
+        <button id="rd-sync" class="btn primary">Sync tags</button>
+      </div>
+      <p id="rd-status" class="hint"></p>
+      <h3>Strongest interests</h3>
+      <p class="hint">Tap a tag to boost it, tap again to mute it, once more to reset. Muted tags push matching comments down.</p>
+      <div id="top-tags" class="tags"></div>
+      <h3>Tags that are not topics</h3>
+      <p class="hint">One per line. Format labels such as essay, news or longform and years are already ignored. Resync after changing this.</p>
+      <textarea id="excluded" rows="3" spellcheck="false"></textarea>
+      <h3>Extra instructions for the model</h3>
+      <textarea id="extra" rows="3" placeholder="For example: prefer clinical and policy angles over tooling."></textarea>
+    </section>
+
+    <section>
+      <h2>Summary</h2>
+      <div class="grid">
+        <label>Comment budget (tokens)<input id="budget" type="number" min="2000" max="200000" step="1000"></label>
+        <label>Max output tokens<input id="maxout" type="number" min="400" max="8000" step="100"></label>
+        <label>Rupees per US dollar<input id="fx" type="number" min="1" step="0.5"></label>
+      </div>
+      <label>Price overrides (JSON: model id to {"in":USD,"out":USD} per million tokens)<textarea id="prices" rows="3" spellcheck="false"></textarea></label>
+    </section>
+
+    <section>
+      <h2>Learning and appearance</h2>
+      <div class="grid">
+        <label>Learning<select id="learning"><option value="implicit">Implicit</option><option value="thumbs">Implicit and thumbs</option><option value="off">Off</option></select></label>
+        <label>Theme<select id="theme"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <label>Sidebar font<select id="font"><option value="system">System</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Usage</h2>
+      <div id="usage" class="hint"></div>
+    </section>
+    <p id="saved" class="hint" role="status"></p>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

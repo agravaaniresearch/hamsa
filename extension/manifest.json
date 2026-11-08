@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Hamsa",
+  "version": "0.1.0",
+  "description": "Relevance-first summaries of long Hacker News threads. Cleans out the noise, ranks what is left against your own Raindrop tags, and says why each point matters to you. Bring your own keys.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "hamsa@agravaani",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["websiteContent", "bookmarksInfo", "authenticationInfo"]
+      }
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "permissions": ["storage", "tabs", "unlimitedStorage"],
+  "host_permissions": ["https://news.ycombinator.com/*", "https://api.raindrop.io/*"],
+  "optional_host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["https://news.ycombinator.com/item*"],
+      "js": ["content/hn.js"],
+      "css": ["content/hn.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "sidebar_action": {
+    "default_title": "Hamsa",
+    "default_panel": "sidebar/sidebar.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" }
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "_execute_sidebar_action": {
+      "suggested_key": { "default": "Alt+Shift+H" },
+      "description": "Toggle the Hamsa sidebar"
+    }
+  }
+}

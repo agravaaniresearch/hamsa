@@ -1,0 +1,30 @@
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+h1 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+h2 { font-size: 15px; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 13px; margin: 16px 0 4px; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 8px; }
+section { margin-bottom: 8px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 10px; }
+label { display: block; font-size: 12.5px; color: var(--muted); }
+input, select, textarea { width: 100%; margin-top: 4px; background: var(--surface); color: var(--text); border: 1px solid var(--field); border-radius: 8px; padding: 6px 8px; font: inherit; }
+.row input { flex: 1; min-width: 200px; width: auto; margin: 0; }
+.row select { width: auto; margin: 0; }
+.btn { border: 1px solid var(--field); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.danger { color: var(--danger); }
+.prov { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; margin-bottom: 10px; }
+.prov .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.prov .head strong { flex: 1; }
+.status { font-size: 12px; padding: 1px 8px; border-radius: 6px; background: var(--surface-2); color: var(--muted); }
+.status.ok { background: var(--ok); color: var(--bg); }
+.status.bad { background: var(--danger-bg); color: var(--danger); }
+.models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.models label { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border-radius: 6px; padding: 2px 8px; color: var(--text); }
+.models input { width: auto; margin: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tg { font-size: 12px; padding: 2px 9px; border-radius: 6px; border: 1px solid var(--field); background: var(--surface-2); color: var(--text); }
+.tg[data-s="1"] { background: var(--ok); color: var(--bg); border-color: var(--ok); }
+.tg[data-s="2"] { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); text-decoration: line-through; }
+:root[data-font="serif"] body { font-family: Georgia, serif; }

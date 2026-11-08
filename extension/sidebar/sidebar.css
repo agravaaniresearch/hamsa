@@ -1,0 +1,54 @@
+body { display: flex; flex-direction: column; min-height: 100%; }
+.top { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 2; }
+.grow { flex: 1; }
+.top select { max-width: 55%; background: var(--surface); border: 1px solid var(--field); border-radius: 6px; padding: 3px 6px; color: var(--text); font-size: 12px; }
+button.icon { border: 0; background: transparent; font-size: 16px; padding: 2px 6px; border-radius: 6px; color: var(--muted); }
+button.icon:hover { background: var(--surface); color: var(--text); }
+:root[data-font="serif"] body { font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; }
+:root[data-font="mono"] body { font-family: var(--mono); font-size: 12.5px; }
+main { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.empty { text-align: center; color: var(--muted); padding: 32px 12px; }
+.empty h2 { color: var(--text); font-size: 15px; margin: 0 0 6px; }
+.btn { border: 1px solid var(--field); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.small { padding: 2px 8px; font-size: 12px; border-radius: 6px; }
+.card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
+.title { font-weight: 600; font-size: 14px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 12px; }
+.strip { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.gist { font-size: 14px; margin: 0 0 6px; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.chip { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 6px; font-weight: 600; margin-right: 6px; }
+.chip.high { background: var(--ok); color: var(--bg); }
+.chip.medium { background: var(--warn); color: var(--bg); }
+.chip.low { background: var(--surface-2); color: var(--muted); }
+.chip.basis { background: transparent; border: 1px solid var(--border); color: var(--muted); font-weight: 400; }
+.point p { margin: 6px 0 0; font-size: 14px; }
+.why { color: var(--muted); font-size: 13px; margin-top: 4px !important; }
+.refs { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.refs button { border: 0; background: transparent; color: var(--accent); padding: 0 3px; text-decoration: underline; font-size: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.tg { font-size: 11px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--field); background: var(--surface-2); color: var(--muted); }
+.tg[data-s="1"] { background: var(--ok); color: var(--bg); border-color: var(--ok); }
+.tg[data-s="2"] { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); text-decoration: line-through; }
+.thumb.on-up { background: var(--ok); color: var(--bg); border-color: var(--ok); }
+.thumb.on-dn { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+.reasons { margin-top: 6px; padding: 6px 8px; background: var(--surface-2); border-radius: 8px; font-size: 12px; color: var(--muted); }
+.reasons button { margin: 4px 4px 0 0; }
+.reasons button.sel { background: var(--bg); font-weight: 600; color: var(--text); }
+h3 { font-size: 12px; margin: 4px 0; text-transform: none; color: var(--muted); letter-spacing: 0.02em; }
+ul.plain { margin: 0; padding-left: 16px; font-size: 13px; }
+ul.plain li { margin: 4px 0; }
+.side { color: var(--muted); }
+.err { background: var(--danger-bg); color: var(--danger); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.log { font-size: 12px; color: var(--muted); }
+.log div { margin-top: 2px; }
+.seg { display: flex; border: 1px solid var(--field); border-radius: 8px; overflow: hidden; margin-top: 6px; }
+.seg button { flex: 1; border: 0; border-radius: 0; background: transparent; font-size: 12px; padding: 4px; }
+.seg button.on { background: var(--surface-2); font-weight: 600; }
+details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

@@ -1,0 +1,13 @@
+[
+ {"title":"Obsidian vault templates for research notes","excerpt":"Structure notes, links and plugins for a personal knowledge vault","tags":["obsidian","pkm"],"created":"2026-09-01"},
+ {"title":"QuickAdd macros in Obsidian","excerpt":"Capture notes with templates and macros inside the vault","tags":["obsidian","pkm"],"created":"2026-09-10"},
+ {"title":"Zettelkasten and linking your thinking","excerpt":"Atomic notes, backlinks, knowledge graph","tags":["pkm"],"created":"2026-08-10"},
+ {"title":"Running Qwen locally on consumer GPUs","excerpt":"Quantised open weight models, llama.cpp, throughput on RTX cards","tags":["local models","sovereign ai"],"created":"2026-10-01"},
+ {"title":"Small language models for on-device inference","excerpt":"Gemma and Qwen on laptops, privacy preserving, no cloud","tags":["local models","sovereign ai"],"created":"2026-10-02"},
+ {"title":"Federated learning for hospital data","excerpt":"Train models across hospitals without moving patient data","tags":["sovereign ai","health data"],"created":"2026-10-04"},
+ {"title":"Sandboxing coding agents with containers","excerpt":"Isolate agents, proxy API keys, review diffs before applying","tags":["agent safety"],"created":"2026-10-20"},
+ {"title":"Brachytherapy dose calculation review","excerpt":"Radiotherapy dosimetry and treatment planning evidence","tags":["radiotherapy","oncology"],"created":"2026-05-02"},
+ {"title":"Glioma recurrence prediction with imaging","excerpt":"Brain tumour MRI models and clinical validation","tags":["oncology","health data"],"created":"2026-06-02"},
+ {"title":"India energy security and Hormuz","excerpt":"Oil imports, shipping lanes and strategic autonomy","tags":["geopolitics","energy"],"created":"2026-09-20"},
+ {"title":"Reading list for the week","excerpt":"links","tags":["to-read","2026"],"created":"2026-09-20"}
+]
