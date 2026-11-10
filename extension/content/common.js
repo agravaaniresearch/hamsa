@@ -311,7 +311,7 @@
     const titleA = h("a", { class: "h-pv-title", href: url, rel: "noopener noreferrer" }, p.title || host);
     if (ctx.ui) track(titleA, { kind: "link", url, title: p.title || ctx.title || url, domain: host, page: ctx.page || "thread" }, ctx.ui);
     const img = p.image ? h("img", { class: "h-pv-img", src: p.image, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" }) : null;
-    img?.addEventListener("error", () => img.remove());
+    img?.addEventListener("error", () => { el.querySelector(".h-pv-media")?.remove(); el.classList.remove("has-img"); });
     const fav = p.icon ? h("img", { class: "h-pv-ico", src: p.icon, alt: "", width: "14", height: "14", referrerpolicy: "no-referrer" }) : null;
     fav?.addEventListener("error", () => fav.remove());
     const item = { id: linkId(url), kind: "link", title: p.title || ctx.title || url, url, domain: host, site: p.site, threadId: ctx.threadId, threadTitle: ctx.threadTitle, excerpt: p.description, author: ctx.author };

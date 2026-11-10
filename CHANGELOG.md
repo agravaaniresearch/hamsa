@@ -2,6 +2,13 @@
 
 All notable changes to Hamsa. Versions follow the signed builds: the committed manifest carries major.minor.patch, and CI builds add the run number as the patch.
 
+## 0.5.1 (2026-11-10)
+
+### Fixed
+- The Discover ribbon no longer sits on top of the story title.
+- A preview whose picture fails to load closes the empty space it left.
+- Labels use plain capitals again; the synthesised small capitals rendered some letters oddly.
+
 ## 0.5.0 (2026-11-10)
 
 ### Link previews

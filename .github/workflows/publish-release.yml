@@ -1,0 +1,44 @@
+name: Publish signed release
+
+# A Mozilla-signed XPI committed to releases/ becomes a GitHub release with its CHANGELOG notes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "releases/*.xpi"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find the newest signed build
+        id: v
+        run: |
+          FILE=$(ls releases/hamsa-*.xpi | sort -V | tail -1)
+          VERSION=$(basename "$FILE" .xpi | sed 's/^hamsa-//')
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Release notes from the changelog
+        run: |
+          awk -v v="## ${{ steps.v.outputs.version }} " 'index($0, v) == 1 { on = 1; next } on && /^## / { exit } on { print }' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "**Install:** download \`hamsa-${{ steps.v.outputs.version }}.xpi\` below, then in Firefox open \`about:addons\`, click the gear and choose *Install Add-on From File*. It is signed by Mozilla (unlisted), so it installs on regular Firefox 140 or later."
+          } >> notes.md
+          cat notes.md
+      - name: Create or update the release
+        run: |
+          TAG="v${{ steps.v.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${{ steps.v.outputs.file }}" --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" "${{ steps.v.outputs.file }}" --title "Hamsa ${{ steps.v.outputs.version }}" --notes-file notes.md --latest
+          fi

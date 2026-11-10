@@ -17,6 +17,46 @@ Hamsa filters Hacker News before any model sees it. It is a Firefox add-on that 
 - **Backup and sync**: one open JSON format (`hamsa.backup/1`) as a file, through Firefox Sync, or in a private GitHub gist.
 - **Look**: Auto, Light and Dark as in Parshva, with warm, neutral or black dark styles; seven bundled fonts with pairings; text size, width, justified text and density; the plain HN pages themed to match.
 
+## Install
+
+Hamsa is not on the Mozilla add-ons site yet. Each release is signed by Mozilla (unlisted), so it installs on ordinary Firefox 140 or later:
+
+1. Download the newest `hamsa-x.y.z.xpi` from [Releases](https://github.com/agravaaniresearch/hamsa/releases/latest) (or from the [`releases`](releases) folder).
+2. In Firefox, open `about:addons`, click the gear icon and choose **Install Add-on From File…**, then pick the file.
+3. Open Hamsa's settings, connect an interest source (Raindrop, browser bookmarks or your HN favourites) and press **Sync all sources**. Visit Hacker News.
+
+Unlisted builds do not update themselves; install the next release the same way. An AI key is optional and only used for thread summaries you ask for.
+
+## Screenshots
+
+**Front page**: Discover leads, highlighted, with link previews.
+
+![Front page with Discover](docs/screenshots/front-discover.png)
+
+**Topics**: stories on one subject grouped, scored as one, marked new or returning.
+
+![Topic groups on the front page](docs/screenshots/front-topics.png)
+
+**Thread**: what reaches the model, sub-discussions, and comments you would not have found.
+
+![Thread overview](docs/screenshots/thread-top.png)
+
+**Quotes in the colour of the person quoted**, and one colour per person.
+
+![Coloured quotes](docs/screenshots/thread-quotes.png)
+
+**Link previews** inside comments, with a thumbs up that likes the link.
+
+![Link preview in a comment](docs/screenshots/link-preview.png)
+
+**Dark mode.**
+
+![Thread in dark mode](docs/screenshots/thread-dark.png)
+
+**The digest**, made only from what you liked, with spaced review.
+
+![Digest](docs/screenshots/digest.png)
+
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 See [DESIGN.md](DESIGN.md) for the reasoning and [SCHEMA.md](SCHEMA.md) for every rule, weight and file format.

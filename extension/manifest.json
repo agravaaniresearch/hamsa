@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hamsa",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Filters Hacker News before any model sees it. Merges the front pages, scores every story and comment against your own bookmarks and tags, folds away flame wars, and says why each item survived. Summaries only on request, with your own key.",
   "icons": {
     "16": "icons/icon-16.png",
