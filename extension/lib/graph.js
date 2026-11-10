@@ -155,7 +155,7 @@ export class TagGraph {
     this.c = compile(this.state);
   }
 
-  recompile() { this.c = compile(this.state); }
+  recompile() { this.c = compile(this.state); this._vocab = null; }
 
   get size() { return Object.keys(this.state.tags).length; }
 
@@ -298,6 +298,12 @@ export class TagGraph {
       contribs.sort((x, y) => y.value - x.value);
       return { contribs: contribs.slice(0, 4), muted };
     });
+  }
+
+  // Every term the compiled tags know: what counts as familiar for Discover.
+  vocabulary() {
+    if (!this._vocab) { this._vocab = new Set(); for (const info of this.c.tags.values()) { for (const t of info.terms.keys()) this._vocab.add(t); for (const t of info.nameTokens) this._vocab.add(t); } }
+    return this._vocab;
   }
 
   // Tag names and counts, for clustering and the options page.

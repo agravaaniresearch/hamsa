@@ -151,3 +151,57 @@ test("near-duplicate comments fold under the better-ranked one, and a thread kee
   assert.ok(r.kept.length >= 10, `kept ${r.kept.length}`);
   assert.ok(thread.comments.some((c) => c.verdict.reasons.some((x) => x.kind === "floor")));
 });
+
+import { emptyPrefs, setPref, derivePrefs, mergePrefs } from "../extension/lib/prefs.js";
+import { makeBackup, readBackup, mergeBackup, toSyncChunks } from "../extension/lib/backup.js";
+
+test("likes: your own choice beats one read from HN, and feeds scoring", () => {
+  let p = emptyPrefs();
+  p = setPref(p, { id: 1, kind: "story", title: "Glioma radiotherapy trial results", domain: "nature.com", tags: ["oncology"] }, "like", "you");
+  p = setPref(p, { id: 1, kind: "story", title: "x" }, "dislike", "hn");
+  assert.equal(p.items["1"].v, "like");
+  p = setPref(p, { id: 2, kind: "story", title: "Seed round for a scheduling startup", domain: "tc.com" }, "dislike", "you");
+  const d = derivePrefs(p);
+  assert.equal(d.likeTitles.length, 1);
+  assert.equal(d.likeDomains["nature.com"], 1);
+  const v = scoreStories([{ id: 9, title: "New glioma radiotherapy trial results published", domain: "nature.com", points: 10, comments: 2 }, { id: 2, title: "Seed round", domain: "tc.com" }], { profile: buildProfile({ items: [{ link: "https://nature.com/a" }] }), prefs: d });
+  assert.ok(v[0].reasons.some((r) => r.kind === "like"));
+  assert.equal(v[1].bucket, "toss");
+  const m = mergePrefs(p, { items: { 3: { v: "like", kind: "story", title: "t", at: 5, source: "you" } } });
+  assert.equal(Object.keys(m.items).length, 3);
+});
+
+test("backup: keys left out by default, merge keeps both sides, sync chunks fit Firefox Sync", () => {
+  const store = { settings: { theme: "dark", active: { providerId: "a" } }, providers: [{ id: "a", name: "Claude", kind: "anthropic", baseUrl: "u", apiKey: "SECRET", models: ["m"] }], raindropToken: "TOKEN",
+    prefs: setPref(emptyPrefs(), { id: 1, title: "t" }, "like"), dismissed: [{ id: 5, at: 1 }], graph: { adj: { rust: 1 }, muted: ["crypto"] }, readingLog: [{ at: 1, id: 1, kind: "story" }] };
+  const b = makeBackup(store, { version: "0.4.0" });
+  const text = JSON.stringify(b);
+  assert.ok(!text.includes("SECRET") && !text.includes("TOKEN"));
+  assert.equal(b.settings.active, undefined);
+  assert.ok(JSON.stringify(makeBackup(store, { includeKeys: true })).includes("SECRET"));
+  assert.throws(() => readBackup({ schema: "x" }));
+  const merged = mergeBackup({ settings: { theme: "light", active: { providerId: "z" } }, dismissed: [{ id: 6, at: 2 }], providers: [] }, readBackup(b));
+  assert.equal(merged.settings.theme, "dark");
+  assert.equal(merged.settings.active.providerId, "z");
+  assert.equal(merged.dismissed.length, 2);
+  assert.equal(merged.providers[0].apiKey, "");
+  assert.deepEqual(merged.teach.muted, ["crypto"]);
+  const big = { ...b, prefs: { items: Object.fromEntries(Array.from({ length: 3000 }, (_, i) => [i, { v: "like", kind: "story", title: "a fairly long story title number " + i, at: i, source: "you" }])) } };
+  const parts = toSyncChunks(big);
+  assert.ok(parts.join("").length <= 90000 && parts.every((p) => p.length <= 7000));
+  assert.equal(JSON.parse(parts.join("")).schema, "hamsa.backup/1");
+});
+
+test("Discover picks unfamiliar stories that HN signals say are worth a look", () => {
+  const graph = new TagGraph(buildState(bm, { params: { minTagCount: 1, minTermDocs: 1 } }));
+  const now = new Date(Date.now() - 2 * 36e5).toISOString().slice(0, 19);
+  const stories = [
+    { id: 1, title: "Obsidian vault templates for research notes", points: 50, comments: 20, age: now, domain: "a.org" },
+    { id: 2, title: "Medieval bridge engineering surprised modern surveyors", points: 400, comments: 180, age: now, domain: "history.net", by: "x" },
+    { id: 3, title: "Tiny unknown", points: 3, comments: 0, age: now },
+  ];
+  const v = scoreStories(stories, { graph, profile: buildProfile({}) });
+  assert.equal(v[1].bucket, "stretch");
+  assert.ok(v[1].discover && v[1].reasons.some((r) => /Unfamiliar/.test(r.label)));
+  assert.notEqual(v[2].bucket, "stretch");
+});

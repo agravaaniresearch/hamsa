@@ -12,7 +12,7 @@
   const path = location.pathname.replace(/^\//, "") || "news";
   const NAMES = { news: "Front page", "": "Front page", newest: "New stories", front: "Past front page", ask: "Ask HN", show: "Show HN", best: "Best stories", shownew: "New Show HN" };
   const name = NAMES[path] || "Stories";
-  const want = path === "news" || path === "" ? Math.max(1, Math.min(6, ui.scoring?.pages || 4)) : Math.max(1, Math.min(3, ui.scoring?.pages || 4));
+  const want = Math.max(1, Math.min(6, ui.scoring?.pages || 5));
 
   const root = H.mount();
   const status = h("div", { class: "h-loading" }, h("span", { class: "h-spin" }), `Reading page 1 of ${want}…`);
@@ -49,6 +49,13 @@
     vote?.addEventListener("click", async () => {
       if (vote.classList.contains("on")) return;
       try { await fetch(new URL(s.voteHref, location.href).href, { credentials: "include" }); vote.classList.add("on"); H.toast("Upvoted on HN"); } catch { H.toast("The vote did not go through."); }
+    });
+    const thumbs = H.thumbs({ id: s.id, kind: "story", title: s.title, domain: s.domain, tags: v.tags }, v, (next) => {
+      const sc = data.scoring;
+      if (next === "dislike") { v._was = v._was || v.bucket; v.bucket = "toss"; }
+      else if (next === "like") { v._was = v._was || v.bucket; v.bucket = v.bucket === "stretch" ? "stretch" : "keep"; }
+      else v.bucket = v._was || (v.score >= sc.keepAt ? "keep" : v.score >= sc.maybeAt ? "maybe" : "toss");
+      draw();
     });
     const dismiss = h("button", { class: "h-btn ghost", type: "button" }, v.dismissed ? "Restore" : "Not for me");
     dismiss.addEventListener("click", async () => {
@@ -89,11 +96,12 @@
             H.bar(v.bucket, v.score), h("span", { class: "h-num" }, v.score.toFixed(2)),
             tags.map((r) => h("span", { class: "h-tag", title: r.label }, r.tag)),
             v.blocked ? h("span", { class: "h-flag plain" }, `blocked: ${v.blocked.group}`) : null,
-            v.bucket === "stretch" ? h("span", { class: "h-flag stretch" }, "outside your tags") : null,
+            v.bucket === "stretch" ? h("span", { class: "h-flag stretch" }, v.discover ? "new to you" : "outside your tags") : null,
+            v.clusterOf ? h("span", { class: "h-flag plain" }, "same topic as a keep") : null,
             more > 0 ? h("span", { class: "h-note" }, `+${more} more signal${more > 1 ? "s" : ""}`) : null),
           also,
           why,
-          h("div", { class: "h-row" }, whyBtn, comments ? H.track(h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread"), entry("thread"), ui) : null, bgThread, s.external ? bgStory : null, dismiss))));
+          h("div", { class: "h-row" }, whyBtn, comments ? H.track(h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread"), entry("thread"), ui) : null, bgThread, s.external ? bgStory : null, thumbs, dismiss))));
   }
 
   // ---- list, chips and panels ----
@@ -105,12 +113,29 @@
     let items = [...byId.values()].filter(({ v }) => !v.dupOf);
     if (order === "hamsa") items.sort((a, b) => RANK[a.v.bucket] - RANK[b.v.bucket] || b.v.score - a.v.score || (b.v.gravity || 0) - (a.v.gravity || 0) || a.s.rank - b.s.rank);
     const visible = items.filter(({ v }) => show[v.bucket]);
-    list.replaceChildren(...(visible.length ? visible.map(storyCard) : [h("div", { class: "h-note" }, "Nothing in the buckets you chose. Switch on Maybe or Toss above.")]));
-    chips.replaceChildren(...["keep", "stretch", "maybe", "toss"].map((b) => {
-      const c = h("button", { class: `h-chip ${b}`, type: "button", "aria-pressed": String(show[b]) }, `${b[0].toUpperCase()}${b.slice(1)} ${counts[b]}`);
+    // In Hamsa's order the page is in sections, Discover first: what you would not have found yourself.
+    const SECTION = {
+      stretch: ["Discover", "What you would not have known: new to you, and worth a look by HN's own signals."],
+      keep: ["Keep", "Matches what you save, open and like."],
+      maybe: ["Maybe", "A weaker match. Held, and re-scored when your interests change."],
+      toss: ["Toss", "Below the floor, blocked, disliked or dismissed. Logged, and restorable."],
+    };
+    const out = [];
+    if (order === "hamsa") {
+      for (const b of ["stretch", "keep", "maybe", "toss"]) {
+        const part = visible.filter(({ v }) => v.bucket === b);
+        if (!part.length) continue;
+        out.push(h("div", { class: `h-section ${b}` }, b === "stretch" ? H.icon("compass", 18) : null, h("strong", {}, `${SECTION[b][0]} · ${part.length}`), h("span", {}, SECTION[b][1])));
+        out.push(...part.map(storyCard));
+      }
+    } else out.push(...visible.map(storyCard));
+    list.replaceChildren(...(out.length ? out : [h("div", { class: "h-note" }, "Nothing in the buckets you chose. Switch on Maybe or Toss above.")]));
+    const LABEL = { keep: "Keep", stretch: "Discover", maybe: "Maybe", toss: "Toss" };
+    chips.replaceChildren(...["stretch", "keep", "maybe", "toss"].map((b) => {
+      const c = h("button", { class: `h-chip ${b}`, type: "button", "aria-pressed": String(show[b]) }, `${LABEL[b]} ${counts[b]}`);
       c.addEventListener("click", () => { show[b] = !show[b]; draw(); });
       return c;
-    }), h("span", { class: "h-grow" }), orderBtn);
+    }), h("span", { class: "h-grow" }), pagesSel, orderBtn);
     orderBtn.textContent = order === "hamsa" ? "Order: Hamsa" : "Order: HN";
     drawSide(counts);
     drawBanners();
@@ -118,6 +143,14 @@
   const orderBtn = h("button", { class: "h-btn", type: "button", title: "Switch between Hamsa's ranking and HN's own order" });
   orderBtn.addEventListener("click", async () => { order = order === "hamsa" ? "hn" : "hamsa"; draw(); await H.send({ type: "set-ui", patch: { order } }).catch(() => {}); });
   const chips = h("div", { class: "h-row" });
+  // How many HN pages to merge: more pages, more to choose from.
+  const pagesSel = h("select", { class: "h-select", "aria-label": "Pages to merge", title: "How many HN pages to read and merge" },
+    [1, 2, 3, 4, 5, 6].map((n) => h("option", { value: String(n) }, `${n} page${n > 1 ? "s" : ""}`)));
+  pagesSel.value = String(want);
+  pagesSel.addEventListener("change", async () => {
+    await H.send({ type: "set-ui", patch: { pages: Number(pagesSel.value) } }).catch(() => {});
+    location.reload();
+  });
   const banners = h("div", { style: "display:flex;flex-direction:column;gap:10px" });
 
   function drawBanners() {
@@ -138,7 +171,7 @@
         h("div", { class: "h-sep" }), h("div", { class: "h-kv" }, h("span", {}, "Your keys today"), h("b", {}, H.usageText(data.usage).replace("Today: ", "")))),
       h("section", { class: "h-panel" }, h("div", { class: "h-label" }, "Buckets"),
         h("div", { class: "h-kv" }, h("span", {}, "Keep"), h("b", {}, String(counts.keep))),
-        h("div", { class: "h-kv" }, h("span", {}, "Stretch (outside your tags)"), h("b", {}, String(counts.stretch))),
+        h("div", { class: "h-kv" }, h("span", {}, "Discover (new to you)"), h("b", {}, String(counts.stretch))),
         h("div", { class: "h-kv" }, h("span", {}, "Maybe (held, re-scorable)"), h("b", {}, String(counts.maybe))),
         h("div", { class: "h-kv" }, h("span", {}, "Toss (logged, restorable)"), h("b", {}, String(counts.toss))),
         h("div", { class: "h-sep" }), h("div", { class: "h-note" }, `Scoring rules v${data.rules}. Ceiling ${data.scoring.ceiling} (provisional), keep at ${data.scoring.keepAt}, maybe at ${data.scoring.maybeAt}.`)),

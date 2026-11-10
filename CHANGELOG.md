@@ -2,6 +2,36 @@
 
 All notable changes to Hamsa. Versions follow the signed builds: the committed manifest carries major.minor.patch, and CI builds add the run number as the patch.
 
+## 0.4.0 (2026-11-10)
+
+### Discover: what you would not have known
+- A **Discover** section now leads the front page. A story qualifies when it is **new to you** (most of its words appear in none of your tags, opens, likes or favourites, and the site is one you have never saved) and the **home page says it is worth a look** (votes per hour by HN's gravity formula, a healthy comment-to-point ratio, the submitter's karma). Several unrelated submissions on one new subject mark it as **emerging**.
+- Score = 0.45 x novelty + 0.30 x quality + 0.15 x new site + 0.10 x emerging, shown line by line under "Why this score". Five per page by default (0 to 15, 0 switches it off).
+- **Near-clustering**: stories sharing a tag or most of their title words form a topic; a story on the same topic as one you keep is lifted ("Same topic as a story you keep").
+
+### Likes, dislikes and signals from the home page
+- **Thumbs up and down** on every story, on the thread's story, and on every comment. Kept in this browser (`hamsa.prefs/1`) and used straight away: similar titles, sites and tags rise or fall; a liked story is kept, a disliked one is tossed.
+- **Your HN votes become likes**: stories you upvoted and comments you upvoted or downvoted are read from the page (only HN's own "unvote" and "undown" links count). Your own thumbs always win over a vote read from HN.
+- **Submitter karma** (HN public API, cached) as a small signal, and as part of Discover's quality.
+
+### Backup and sync
+- **Backup file**: everything you set and taught Hamsa in one open JSON file (`hamsa.backup/1`): settings, blocklist, likes and dislikes, dismissals, what you open, and topic boosts and mutes; optionally the reading log, and only if you tick it, your keys. **Restore** merges, never overwrites.
+- **Firefox Sync**: settings, blocklist, likes and dismissals follow you to every Firefox where you are signed in. No keys and no reading log; trimmed to fit Firefox's 100 KB.
+- **GitHub (private gist)**: the same backup pushed to a secret gist and pulled anywhere, by hand or automatically after changes.
+
+### Settings, redesigned
+- A new settings page: an illustrated hero with live status (interests, AI, sync, likes), a sticky section menu, an illustrated **How Hamsa works** in four steps, a **Getting started** checklist, and for every section a short **In plain words** explanation with its own drawing.
+- Discover, likes and the reading log share one section; backup, Firefox Sync and GitHub sit side by side.
+
+### Front page
+- **Five pages** by default (about 150 stories), and a page selector (1 to 6) on the front page itself.
+- Sections in Hamsa's order: Discover, Keep, Maybe, Toss.
+
+### Fixed
+- An empty karma lookup no longer rewrites the karma cache.
+- Thumbs on comments now show their state straight away.
+- Scoring rules are now v0.4.
+
 ## 0.3.0 (2026-11-10)
 
 ### Fixed

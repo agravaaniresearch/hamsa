@@ -32,7 +32,8 @@ export function parseFront(doc) {
       ageText: sub?.querySelector(".age a")?.textContent?.trim() || sub?.querySelector(".age")?.textContent?.trim() || "",
       comments: commentsA && /comment/i.test(commentsA.textContent) ? num(commentsA.textContent) : 0,
       voteHref: row.querySelector(`a#up_${id}`)?.getAttribute("href") || null,
-      voted: !!row.querySelector(`a#up_${id}.nosee`) || !!row.querySelector(`#up_${id}.nosee`),
+      // Only an "unvote" link proves your vote: a hidden arrow can also mean the story is your own.
+      voted: /unvote/i.test(sub?.querySelector(`#un_${id}`)?.textContent || ""),
       kind,
     });
   }

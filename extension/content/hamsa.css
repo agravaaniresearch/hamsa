@@ -239,3 +239,13 @@ button.h-tag { cursor: pointer; }
 /* The text font is for what you read; controls stay in the system font. */
 #hamsa-root .h-cbody, #hamsa-root .h-toptext, #hamsa-root .h-gist, #hamsa-root .h-point p, #hamsa-root .h-quote, #hamsa-root .h-preview { font-family: var(--h-font); }
 #hamsa-root .h-stitle, #hamsa-root .h-h1 { font-family: var(--h-title); }
+
+/* 0.4: sections, thumbs */
+.h-section { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0 0; padding: 4px 2px; color: var(--h-muted); font-size: 13px; }
+.h-section strong { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--h-text); }
+.h-section svg { align-self: center; color: var(--h-stretch); }
+.h-section.stretch strong { color: var(--h-stretch); }
+.h-section.keep strong { color: var(--h-keep); }
+.h-ibtn.like[aria-pressed="true"] { color: var(--h-keep); border-color: var(--h-keep); background: var(--h-keep-bg); }
+.h-ibtn.dislike[aria-pressed="true"] { color: var(--h-danger); border-color: var(--h-danger); background: var(--h-danger-bg); }
+.h-cfoot .h-ibtn { width: 30px; min-height: 28px; border-radius: 7px; }

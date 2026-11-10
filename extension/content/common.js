@@ -38,6 +38,9 @@
     digest: [["path", { d: "M5 4h14v16H5z" }], ["path", { d: "M8 8h8M8 12h8M8 16h5" }]],
     up: [["path", { d: "M12 6l6 9H6z", fill: "currentColor", stroke: "none" }]],
     bg: [["rect", { x: 3, y: 7, width: 13, height: 13, rx: 2 }], ["path", { d: "M8 3h13v13" }], ["path", { d: "M14 10l7-7" }]],
+    like: [["path", { d: "M7 11v9H4v-9zM7 11l4-7c1.3 0 2.3 1 2 2.4L12.4 10H18a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 16.7 20H7" }]],
+    dislike: [["path", { d: "M7 11v9H4v-9zM7 11l4-7c1.3 0 2.3 1 2 2.4L12.4 10H18a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 16.7 20H7", transform: "rotate(180 12 12)" }]],
+    compass: [["circle", { cx: 12, cy: 12, r: 9 }], ["path", { d: "M15.5 8.5l-2 5-5 2 2-5z", fill: "currentColor" }]],
   };
   function icon(name, size = 18) {
     const s = document.createElementNS(SVGNS, "svg");
@@ -175,7 +178,7 @@
   }
 
   // ---- score pieces ----
-  const BUCKET_LABEL = { keep: "KEEP", maybe: "MAYBE", stretch: "STRETCH", toss: "TOSS", removed: "REMOVED" };
+  const BUCKET_LABEL = { keep: "KEEP", maybe: "MAYBE", stretch: "DISCOVER", toss: "TOSS", removed: "REMOVED" };
   const badge = (bucket, score) => h("span", { class: `h-badge ${bucket}` }, score != null && bucket !== "removed" ? `${score.toFixed(2)} · ${BUCKET_LABEL[bucket]}` : BUCKET_LABEL[bucket]);
   function bar(bucket, score) {
     const b = h("span", { class: `h-bar ${bucket}`, role: "img", "aria-label": `Relevance ${score.toFixed(2)} of 1` }, h("i"));
@@ -190,7 +193,7 @@
       v.reasons.length ? v.reasons.map((r) => h("div", { class: "h-kv" }, h("span", {}, r.label), h("span", { class: r.points < 0 ? "neg" : "" }, sign(r.points)))) : h("div", { class: "h-note" }, "No signal matched."),
       h("div", { class: "h-sep" }),
       h("div", { class: "h-kv" }, h("span", {}, `Total ${(v.total ?? 0).toFixed(2)}, scaled to 0 to 1 with ceiling ${scoring?.ceiling ?? 0.9} (provisional)`), h("span", {}, (v.score ?? 0).toFixed(2))),
-      h("div", { class: "h-note" }, `Bucket: ${v.bucket}${v.rule ? ` (${v.rule.replace(/_/g, " ")})` : ""} · scoring rules v${v.rules || "?"} · keep at ${scoring?.keepAt ?? 0.55}, maybe at ${scoring?.maybeAt ?? 0.2}`));
+      h("div", { class: "h-note" }, `Bucket: ${v.bucket === "stretch" ? "discover" : v.bucket}${v.rule ? ` (${v.rule.replace(/_/g, " ")})` : ""} · scoring rules v${v.rules || "?"} · keep at ${scoring?.keepAt ?? 0.55}, maybe at ${scoring?.maybeAt ?? 0.2}`));
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -246,5 +249,27 @@
     return send({ type: "open-tab", url, active: !!active, entry }).then(() => { if (!active) toast("Opened in a background tab"); }).catch((e) => toast(e.message));
   }
 
-  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
+  // Like / dislike: kept in this browser, used straight away in scoring.
+  function thumbs(item, state, onChange) {
+    const btns = [];
+    const mk = (val, label) => {
+      const b = h("button", { class: `h-ibtn ${val}`, type: "button", title: label, "aria-label": label, "aria-pressed": String(state.pref === val) }, icon(val, 16));
+      b.addEventListener("click", async () => {
+        const next = state.pref === val ? null : val;
+        try {
+          await send({ type: "pref", item, value: next });
+          state.pref = next;
+          for (const x of btns) x.setAttribute("aria-pressed", String(x.dataset.val === next));
+          toast(next === "like" ? "Liked: more like this" : next === "dislike" ? "Disliked: less like this" : "Cleared");
+          onChange?.(next);
+        } catch (e) { toast(e.message); }
+      });
+      b.dataset.val = val;
+      btns.push(b);
+      return b;
+    };
+    return [mk("like", "Like: more like this"), mk("dislike", "Dislike: less like this")];
+  }
+
+  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, thumbs, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
 })();

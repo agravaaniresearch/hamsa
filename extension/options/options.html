@@ -10,180 +10,302 @@
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="page">
-    <div class="titlebar">
-      <h1><img src="../icons/icon-48.png" alt="" width="30" height="30"> Hamsa</h1>
-      <button id="btn-theme" class="icon" type="button" title="Theme: Auto" aria-label="Theme: Auto"></button>
-    </div>
-    <p class="lede">Hamsa filters Hacker News before any model sees it. Stories and comments are cleaned and scored on this computer against your own interests; a model is called only when you ask for a summary, with your key.</p>
-
-    <div id="perm" class="callout" hidden>
-      <p>Hamsa needs permission to run on news.ycombinator.com before it can filter pages.</p>
-      <button id="perm-grant" class="primary" type="button">Allow on Hacker News</button>
-    </div>
-
-    <h2>Appearance</h2>
-    <div class="seg" role="radiogroup" aria-label="Theme">
-      <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-      <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
-      <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
-    </div>
-    <p class="lede small">Auto follows your system setting. The header on Hacker News and on the digest also has a button that cycles through the three.</p>
-    <div class="grid">
-      <label class="field"><span>Hamsa on Hacker News</span>
-        <select id="layer"><option value="on">On: filtered pages</option><option value="off">Off: plain HN</option></select></label>
-      <label class="field"><span>Front page order</span>
-        <select id="order"><option value="hamsa">Hamsa: keep, stretch, maybe</option><option value="hn">HN's own order</option></select></label>
-    </div>
-
-    <h2>Reading</h2>
-    <p class="lede">Hamsa owns the whole reading layout on Hacker News, in the spirit of Modern for Hacker News. Fonts are bundled, so they work offline.</p>
-    <div class="grid">
-      <label class="field"><span>Text font</span>
-        <select id="font"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata (serif, for long reading)</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
-      <label class="field"><span>Title font</span>
-        <select id="titleFont"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
-      <label class="field"><span>Text size</span>
-        <select id="textSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option><option value="xl">Extra large</option></select></label>
-      <label class="field"><span>Page width</span>
-        <select id="width"><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide</option></select></label>
-      <label class="field"><span>Comment text</span>
-        <select id="justify"><option value="off">Ragged right</option><option value="on">Justified</option></select></label>
-      <label class="field"><span>Density</span>
-        <select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
-      <label class="field"><span>Dark style</span>
-        <select id="darkStyle"><option value="warm">Warm charcoal</option><option value="neutral">Neutral grey</option><option value="black">Black (OLED)</option></select></label>
-      <label class="field"><span>Other HN pages</span>
-        <select id="skin"><option value="on">Themed to match</option><option value="off">Plain HN</option></select></label>
-      <label class="field"><span>Story links open in</span>
-        <select id="linkTarget"><option value="same">This tab</option><option value="new">A new tab</option><option value="background">A background tab</option></select></label>
-    </div>
-    <div id="font-sample" class="sample">The quick brown fox: a sample of the text and title fonts you picked.</div>
-
-    <h2>Reading log</h2>
-    <p class="lede">Hamsa remembers the stories, threads and links you open, and the stories it showed you, in this browser only. What you open becomes a signal (sites, title words and tags you click), and the export is a ready-made dataset for tuning a local model on your own choices.</p>
-    <div class="row">
-      <label class="switch"><input type="checkbox" id="readingLog"><span></span></label><span>Remember what I open</span>
-      <span id="log-count" class="status"></span>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="log-export" class="secondary" type="button">Download reading log (JSONL)</button>
-      <button id="log-clear" class="secondary" type="button">Clear the log</button>
-    </div>
-
-    <h2>Interest sources</h2>
-    <p class="lede">Each source only has to supply titles, links and, where it has them, tags. Tags feed the relevance graph; links, favourites and history feed the site and title signals. Nothing here leaves this browser except the calls to Raindrop and HN.</p>
-    <div class="sources">
-      <div class="src">
-        <div class="srchead"><label class="switch"><input type="checkbox" id="src-raindrop"><span></span></label><strong>Raindrop</strong><span id="n-raindrop" class="badge"></span></div>
-        <div class="srcbody">
-          <div class="keyrow"><input id="rd-token" type="password" placeholder="Raindrop test token" autocomplete="off" spellcheck="false" aria-label="Raindrop test token"><button id="rd-eye" class="secondary eye" type="button">Show</button></div>
-          <label class="check"><input type="checkbox" id="src-highlights"> Use highlights (passages you marked count for more than a bare save)</label>
-          <small>Create a test token in Raindrop under Settings, Integrations, For developers. Saving summary points back to Raindrop uses the same token.</small>
+  <!-- ======================= HERO ======================= -->
+  <header class="hero">
+    <div class="hero-in">
+      <svg class="hero-art" viewBox="0 0 320 220" aria-hidden="true">
+        <defs>
+          <linearGradient id="hw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d9bf"/><stop offset="1" stop-color="#e7b98f"/></linearGradient>
+          <linearGradient id="hs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffaf3"/><stop offset="1" stop-color="#f4e6d4"/></linearGradient>
+        </defs>
+        <ellipse cx="160" cy="176" rx="138" ry="28" fill="url(#hw)" opacity=".55"/>
+        <path d="M30 178c14-8 28-8 42 0s28 8 42 0 28-8 42 0 28 8 42 0 28-8 42 0 28 8 42 0" fill="none" stroke="#c9895a" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+        <path d="M58 196c12-6 24-6 36 0s24 6 36 0 24-6 36 0 24 6 36 0 24-6 36 0" fill="none" stroke="#c9895a" stroke-width="2.5" stroke-linecap="round" opacity=".35"/>
+        <g transform="translate(70 18) scale(1.9)">
+          <path d="M26 58c-1 12 13 19 31 18 16-1 26-11 28-27-9 7-20 8-29 4-10-4-20-3-30 5z" fill="url(#hs)" stroke="#d9b48f" stroke-width="1"/>
+          <path d="M33 60c-10-8-11-22-1-30 8-6 9-15 2-19-6-4-14 0-14 8" fill="none" stroke="#fffaf3" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M33 60c-10-8-11-22-1-30 8-6 9-15 2-19-6-4-14 0-14 8" fill="none" stroke="#d9b48f" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+          <path d="M17 17l-8 5 9 2z" fill="#e58a3c"/>
+          <circle cx="23" cy="17" r="1.8" fill="#4a2a16"/>
+          <path d="M52 64c8-4 18-5 28-8" fill="none" stroke="#d9b48f" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <circle cx="250" cy="150" r="5" fill="#fffaf3" stroke="#d9b48f"/><circle cx="266" cy="160" r="3.5" fill="#fffaf3" stroke="#d9b48f"/>
+                <path d="M262 52l4 9 9 4-9 4-4 9-4-9-9-4 9-4z" fill="#e58a3c" opacity=".85"/>
+        <path d="M288 84l2.5 5 5 2.5-5 2.5-2.5 5-2.5-5-5-2.5 5-2.5z" fill="#6e3561" opacity=".7"/>
+      </svg>
+      <div class="hero-text">
+        <p class="eyebrow">Hamsa · settings</p>
+        <h1>Hacker News, read for you.</h1>
+        <p class="lede">The swan of the old saying separates milk from water. Hamsa does the same with Hacker News: it sweeps out the noise, keeps what matters to you, and sets aside a few things you would never have found yourself.</p>
+        <div class="chips" aria-live="polite">
+          <span class="stat" id="st-interests"><i></i><span>Interests</span></span>
+          <span class="stat" id="st-model"><i></i><span>AI summaries</span></span>
+          <span class="stat" id="st-sync"><i></i><span>Sync</span></span>
+          <span class="stat" id="st-likes"><i></i><span>Likes</span></span>
         </div>
       </div>
-      <div class="src">
-        <div class="srchead"><label class="switch"><input type="checkbox" id="src-hnfav"><span></span></label><strong>HN favourites and upvotes</strong><span id="n-hnfav" class="badge"></span></div>
-        <div class="srcbody">
-          <input id="hn-user" type="text" placeholder="HN user name (filled in when you open HN logged in)" aria-label="HN user name" autocomplete="off" spellcheck="false">
-          <small>Favourites are public. Upvoted stories are read only if you are logged in to HN in this browser. This reads your HN pages, so it may stop working if HN changes its layout.</small>
+      <button id="btn-theme" class="icon hero-theme" type="button" title="Theme: Auto" aria-label="Theme: Auto"></button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- ======================= NAV ======================= -->
+    <nav class="nav" aria-label="Settings sections">
+      <a href="#s-start"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg><span>Start here</span></a>
+      <a href="#s-look"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg><span>Look and feel</span></a>
+      <a href="#s-interests"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>Your interests</span></a>
+      <a href="#s-discover"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor"/></svg><span>Discover and likes</span></a>
+      <a href="#s-block"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12h7"/></svg><span>Blocklist</span></a>
+      <a href="#s-score"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16V9M12 16V5M17 16v-4"/></svg><span>Scoring</span></a>
+      <a href="#s-ai"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/></svg><span>AI summaries</span></a>
+      <a href="#s-sync"><svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg><span>Backup and sync</span></a>
+      <a href="#s-activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>Activity</span></a>
+    </nav>
+
+    <main class="content">
+      <div id="perm" class="callout warn" hidden>
+        <p><strong>One permission is missing.</strong> Firefox needs your OK before Hamsa can work on news.ycombinator.com.</p>
+        <button id="perm-grant" class="primary" type="button">Allow on Hacker News</button>
+      </div>
+
+      <!-- ======================= START ======================= -->
+      <section class="sec" id="s-start">
+        <div class="sec-head"><span class="tile t-rust"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg></span><div><h2>How Hamsa works</h2><p>Four steps, every time you open Hacker News. None of them sends anything to an AI.</p></div></div>
+        <ol class="steps">
+          <li>
+            <svg viewBox="0 0 120 90" aria-hidden="true"><rect x="30" y="14" width="56" height="66" rx="6" fill="#f3e6d6" stroke="#c9895a" stroke-width="2"/><rect x="38" y="8" width="56" height="66" rx="6" fill="#fffaf3" stroke="#c9895a" stroke-width="2"/><path d="M48 24h36M48 34h36M48 44h28M48 54h32M48 64h20" stroke="#b4531a" stroke-width="3" stroke-linecap="round" opacity=".7"/></svg>
+            <strong>1 · Reads the pages</strong><span>Five pages of Hacker News, merged into one list.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 120 90" aria-hidden="true"><path d="M22 18h76l-28 30v26l-20 8V48z" fill="#fffaf3" stroke="#c9895a" stroke-width="2.5" stroke-linejoin="round"/><circle cx="40" cy="10" r="4" fill="#b4531a"/><circle cx="60" cy="6" r="3" fill="#6b7a3a"/><circle cx="78" cy="11" r="4" fill="#b4531a"/><circle cx="58" cy="86" r="3.5" fill="#6b7a3a"/><path d="M96 60l10 10M106 60l-10 10" stroke="#a3261f" stroke-width="3" stroke-linecap="round" opacity=".7"/></svg>
+            <strong>2 · Sweeps out the noise</strong><span>Flame wars, insults, repeats and one-liners are folded away.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 120 90" aria-hidden="true"><path d="M40 10h40v72l-20-14-20 14z" fill="#fffaf3" stroke="#c9895a" stroke-width="2.5" stroke-linejoin="round"/><path d="M60 50c-10-8-14-13-10-18 3-4 8-3 10 1 2-4 7-5 10-1 4 5 0 10-10 18z" fill="#b4531a"/></svg>
+            <strong>3 · Matches what you love</strong><span>Scores each story against your bookmarks, likes and reading.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 120 90" aria-hidden="true"><circle cx="78" cy="40" r="26" fill="#f6eaf2" stroke="#6e3561" stroke-width="2.5"/><path d="M88 30l-7 14-14 7 7-14z" fill="#6e3561"/><g transform="translate(6 26) scale(.62)"><path d="M26 58c-1 12 13 19 31 18 16-1 26-11 28-27-9 7-20 8-29 4-10-4-20-3-30 5z" fill="#fffaf3" stroke="#c9895a" stroke-width="2"/><path d="M33 60c-10-8-11-22-1-30 8-6 9-15 2-19-6-4-14 0-14 8" fill="none" stroke="#c9895a" stroke-width="9" stroke-linecap="round"/><path d="M33 60c-10-8-11-22-1-30 8-6 9-15 2-19-6-4-14 0-14 8" fill="none" stroke="#fffaf3" stroke-width="6" stroke-linecap="round"/><path d="M17 17l-8 5 9 2z" fill="#e58a3c"/></g></svg>
+            <strong>4 · Shows the best, and something new</strong><span>Your keeps first, plus a few discoveries you would not have found.</span>
+          </li>
+        </ol>
+        <div class="checklist" id="checklist">
+          <h3>Getting started</h3>
+          <div class="check-item" id="ck-perm"><i></i><div><strong>Let Hamsa work on Hacker News</strong><span>Usually done when you install it.</span></div></div>
+          <div class="check-item" id="ck-src"><i></i><div><strong>Connect where your bookmarks live</strong><span>Raindrop, your browser's bookmarks, or your HN favourites. <a href="#s-interests">Set up</a></span></div></div>
+          <div class="check-item" id="ck-ai"><i></i><div><strong>Optional: add an AI key for summaries</strong><span>Only if you want summaries of long discussions. <a href="#s-ai">Add a key</a></span></div></div>
+          <div class="check-item" id="ck-sync"><i></i><div><strong>Optional: keep a backup</strong><span>So your likes and settings survive a new computer. <a href="#s-sync">Back up</a></span></div></div>
         </div>
-      </div>
-      <div class="src">
-        <div class="srchead"><label class="switch"><input type="checkbox" id="src-bookmarks"><span></span></label><strong>Browser bookmarks</strong><span id="n-bookmarks" class="badge"></span></div>
-        <div class="srcbody"><small>Folders act as tags, so a folder called Oncology works like a tag. No key is needed and nothing leaves the browser. Firefox asks for permission the first time.</small></div>
-      </div>
-      <div class="src">
-        <div class="srchead"><label class="switch"><input type="checkbox" id="src-history"><span></span></label><strong>Browser history</strong><span id="n-history" class="badge"></span></div>
-        <div class="srcbody"><small>Opt-in. Only which sites you read often over the last 90 days is kept, as a small signal. It stays in this browser.</small></div>
-      </div>
-      <div class="src">
-        <div class="srchead"><strong>Import a bookmarks file</strong><span id="n-file" class="badge"></span></div>
-        <div class="srcbody">
-          <div class="row"><input id="bm-file" type="file" accept=".html,.htm,.json" aria-label="Bookmarks file"><button id="bm-clear" class="secondary" type="button">Remove imported</button></div>
-          <small>Any browser's exported bookmarks (HTML), or a JSON list from Pinboard or another service. Folders and tags become tags.</small>
+      </section>
+
+      <!-- ======================= LOOK ======================= -->
+      <section class="sec" id="s-look">
+        <div class="sec-head"><span class="tile t-ochre"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></span><div><h2>Look and feel</h2><p>Colours, letters and layout.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><rect x="4" y="10" width="38" height="40" rx="8" fill="#fffaf3" stroke="#c9895a" stroke-width="2"/><rect x="40" y="10" width="38" height="40" rx="8" fill="#26211b"/><text x="10" y="37" font-size="17" font-family="Georgia,serif" fill="#26211b">Aa</text><text x="46" y="37" font-size="17" font-family="Georgia,serif" fill="#f6f0e6">Aa</text></svg><p><b>In plain words:</b> this only changes how things look, never what you see. Pick light or dark, a font you find easy to read, and a size that suits your eyes.</p></div>
+        <div class="card">
+          <div class="field-row">
+            <div><strong>Theme</strong><small>Auto follows your computer's setting.</small></div>
+            <div class="seg" role="radiogroup" aria-label="Theme">
+              <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+              <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+              <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
+            </div>
+          </div>
+          <div class="grid">
+            <label class="field"><span>Dark style</span><select id="darkStyle"><option value="warm">Warm charcoal</option><option value="neutral">Neutral grey</option><option value="black">Black (good for OLED screens)</option></select></label>
+            <label class="field"><span>Text font</span>
+              <select id="font"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata (serif, for long reading)</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible (easiest to read)</option><option value="plex-mono">IBM Plex Mono</option></select></label>
+            <label class="field"><span>Title font</span>
+              <select id="titleFont"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
+            <label class="field"><span>Text size</span><select id="textSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option><option value="xl">Extra large</option></select></label>
+            <label class="field"><span>Page width</span><select id="width"><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide</option></select></label>
+            <label class="field"><span>Comment text</span><select id="justify"><option value="off">Ragged right</option><option value="on">Justified</option></select></label>
+            <label class="field"><span>Spacing</span><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+            <label class="field"><span>Other HN pages</span><select id="skin"><option value="on">Themed to match</option><option value="off">Plain HN</option></select></label>
+          </div>
+          <div id="font-sample" class="sample"></div>
         </div>
-      </div>
-    </div>
-    <div class="row sync">
-      <button id="sync" class="primary" type="button">Sync all sources</button>
-      <span id="sync-status" class="status" role="status"></span>
-    </div>
+        <div class="card">
+          <h3>How pages behave</h3>
+          <div class="grid">
+            <label class="field"><span>Hamsa on Hacker News</span><select id="layer"><option value="on">On: filtered pages</option><option value="off">Off: plain HN</option></select></label>
+            <label class="field"><span>Front page order</span><select id="order"><option value="hamsa">Hamsa: Discover, keep, maybe</option><option value="hn">HN's own order</option></select></label>
+            <label class="field"><span>Story links open in</span><select id="linkTarget"><option value="same">This tab</option><option value="new">A new tab</option><option value="background">A background tab</option></select></label>
+            <label class="field"><span>Front pages to read</span><input id="sc-pages" type="number" min="1" max="6" step="1"></label>
+          </div>
+          <small class="hint">More pages means more to choose from. Five pages is about 150 stories; you can also change it on the front page itself.</small>
+        </div>
+      </section>
 
-    <h3>Strongest interests</h3>
-    <p class="lede small">Tap a tag to boost it, tap again to mute it, once more to reset. Muted tags push matching stories and comments down.</p>
-    <div id="top-tags" class="tags"></div>
-    <details class="card">
-      <summary>Tags that are not topics, and extra instructions</summary>
-      <div class="card-body">
-        <label class="field"><span>Tags that are not topics (one per line; resync after changing)</span><textarea id="excluded" rows="3" spellcheck="false"></textarea></label>
-        <small>Format labels such as essay, news or longform, and years, are already ignored.</small>
-        <label class="field"><span>Extra instructions for the model</span><textarea id="extra" rows="3" placeholder="For example: prefer clinical and policy angles over tooling."></textarea></label>
-      </div>
-    </details>
+      <!-- ======================= INTERESTS ======================= -->
+      <section class="sec" id="s-interests">
+        <div class="sec-head"><span class="tile t-olive"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg></span><div><h2>Your interests</h2><p>Where Hamsa learns what you care about.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><path d="M14 6h22v46l-11-8-11 8z" fill="#fffaf3" stroke="#6b7a3a" stroke-width="2"/><path d="M44 6h22v46l-11-8-11 8z" fill="#eef1e2" stroke="#6b7a3a" stroke-width="2"/><path d="M50 22h10M50 28h8" stroke="#6b7a3a" stroke-width="2" stroke-linecap="round"/><path d="M25 26c-4-3-6-6-4-8 1-2 3-2 4 0 1-2 3-2 4 0 2 2 0 5-4 8z" fill="#b4531a"/></svg><p><b>In plain words:</b> Hamsa looks at the bookmarks you already keep and the words in them, and from that it learns your taste. Switch on the places you save things, then press <em>Sync all sources</em>. Nothing is uploaded anywhere.</p></div>
+        <div class="sources">
+          <div class="src">
+            <div class="srchead"><label class="switch"><input type="checkbox" id="src-raindrop"><span></span></label><div class="srcname"><strong>Raindrop</strong><small>Your Raindrop bookmarks and their tags.</small></div><span id="n-raindrop" class="badge"></span></div>
+            <div class="srcbody">
+              <div class="keyrow"><input id="rd-token" type="password" placeholder="Raindrop test token" autocomplete="off" spellcheck="false" aria-label="Raindrop test token"><button id="rd-eye" class="secondary eye" type="button">Show</button></div>
+              <label class="check"><input type="checkbox" id="src-highlights"> Use highlights too: passages you marked count for more</label>
+              <small>Get a token in Raindrop: Settings, then Integrations, then For developers, then Create a test token.</small>
+            </div>
+          </div>
+          <div class="src">
+            <div class="srchead"><label class="switch"><input type="checkbox" id="src-hnfav"><span></span></label><div class="srcname"><strong>HN favourites and upvotes</strong><small>Stories you starred or upvoted on Hacker News.</small></div><span id="n-hnfav" class="badge"></span></div>
+            <div class="srcbody">
+              <input id="hn-user" type="text" placeholder="Your HN user name (filled in when you visit HN logged in)" aria-label="HN user name" autocomplete="off" spellcheck="false">
+              <small>Upvotes are read only when you are logged in to HN in this browser.</small>
+            </div>
+          </div>
+          <div class="src">
+            <div class="srchead"><label class="switch"><input type="checkbox" id="src-bookmarks"><span></span></label><div class="srcname"><strong>Browser bookmarks</strong><small>Folder names act as topics. Firefox asks once.</small></div><span id="n-bookmarks" class="badge"></span></div>
+          </div>
+          <div class="src">
+            <div class="srchead"><label class="switch"><input type="checkbox" id="src-history"><span></span></label><div class="srcname"><strong>Browser history</strong><small>Only which sites you visit often. Stays here.</small></div><span id="n-history" class="badge"></span></div>
+          </div>
+          <div class="src">
+            <div class="srchead"><span class="filetile"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg></span><div class="srcname"><strong>A bookmarks file</strong><small>Exported from any browser, Pinboard or similar.</small></div><span id="n-file" class="badge"></span></div>
+            <div class="srcbody"><div class="row"><input id="bm-file" type="file" accept=".html,.htm,.json" aria-label="Bookmarks file"><button id="bm-clear" class="secondary" type="button">Remove imported</button></div></div>
+          </div>
+        </div>
+        <div class="row sync"><button id="sync" class="primary big" type="button">Sync all sources</button><span id="sync-status" class="status" role="status"></span></div>
+        <div class="card">
+          <h3>What Hamsa thinks you like</h3>
+          <p class="hint">Your strongest topics. Tap once to boost a topic, twice to mute it, three times to reset.</p>
+          <div id="top-tags" class="tags"></div>
+          <details class="more">
+            <summary>Tags that are not topics, and notes for the AI</summary>
+            <label class="field"><span>Tags that are not topics (one per line; sync again after changing)</span><textarea id="excluded" rows="3" spellcheck="false"></textarea></label>
+            <label class="field"><span>A note for the AI about what you care about</span><textarea id="extra" rows="3" placeholder="For example: prefer clinical and policy angles over tooling."></textarea></label>
+          </details>
+        </div>
+      </section>
 
-    <h2>Blocklist</h2>
-    <p class="lede">A plain, shareable file of topic groups. A match never deletes a story: it moves it to toss with the rule written next to it, and a strong match on your own tags overrides the block. Drafted and suggested groups stay off until you switch them on.</p>
-    <div id="groups"></div>
-    <div class="row"><button id="add-group" class="secondary" type="button">Add a group</button></div>
+      <!-- ======================= DISCOVER ======================= -->
+      <section class="sec" id="s-discover">
+        <div class="sec-head"><span class="tile t-plum"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor"/></svg></span><div><h2>Discover and likes</h2><p>The stories you would not have found, and how you teach Hamsa.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><circle cx="30" cy="30" r="22" fill="#f6eaf2" stroke="#6e3561" stroke-width="2"/><path d="M39 21l-6 12-12 6 6-12z" fill="#6e3561"/><path d="M60 14l3 6 6 3-6 3-3 6-3-6-6-3 6-3z" fill="#e58a3c"/><path d="M66 40l2 4 4 2-4 2-2 4-2-4-4-2 4-2z" fill="#6e3561" opacity=".6"/></svg><p><b>In plain words:</b> on every front page, Hamsa sets aside a few stories that match nothing you have ever saved, but that other readers clearly find worth reading. That is the <em>Discover</em> section, and it comes first. Thumbs up and down on any story or comment teach Hamsa your taste; stories you upvote on HN count as likes too.</p></div>
+        <div class="card">
+          <div class="field-row"><div><strong>Discoveries per front page</strong><small>0 switches Discover off.</small></div><input id="sc-discoverCount" type="number" min="0" max="15" step="1" class="num"></div>
+          <ul class="howlist">
+            <li><b>New to you</b>: most of its words appear nowhere in your bookmarks, opens or likes.</li>
+            <li><b>Worth a look</b>: rising points, a healthy number of comments, a respected submitter.</li>
+            <li><b>A new site</b> you have never saved, or an <b>emerging topic</b> several people posted about today.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="field-row"><div><strong>Your likes and dislikes</strong><small id="likes-count">None yet.</small></div><button id="likes-clear" class="secondary" type="button">Clear all</button></div>
+          <div id="likes-list" class="likes"></div>
+        </div>
+        <div class="card">
+          <div class="field-row"><div><strong>Remember what I open</strong><small id="log-count"></small></div><label class="switch"><input type="checkbox" id="readingLog"><span></span></label></div>
+          <p class="hint">Stories and links you open are remembered in this browser and used as a quiet signal. The log can be downloaded to train a small AI of your own on your choices.</p>
+          <div class="row"><button id="log-export" class="secondary" type="button">Download reading log (JSONL)</button><button id="log-clear" class="secondary" type="button">Clear the log</button></div>
+        </div>
+      </section>
 
-    <div class="panel">
-      <label class="field"><span>Describe what you do not want to see</span><textarea id="draft-text" rows="3" placeholder="In your own words. For example: SaaS launches, funding rounds and hiring posts."></textarea></label>
-      <div class="row">
-        <button id="draft" class="primary" type="button">Draft rules</button>
-        <button id="test" class="secondary" type="button">Test on today's front page</button>
-        <span id="bl-status" class="status" role="status"></span>
-      </div>
-      <small>Drafting is one short call to your selected model. Testing reads pages 1 to 4 of HN and shows what each group would have blocked; nothing is changed.</small>
-      <div id="test-out"></div>
-    </div>
+      <!-- ======================= BLOCKLIST ======================= -->
+      <section class="sec" id="s-block">
+        <div class="sec-head"><span class="tile t-rust"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12h7"/></svg></span><div><h2>Blocklist</h2><p>Topics you never want to see.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><path d="M40 4l22 8v16c0 13-10 22-22 26-12-4-22-13-22-26V12z" fill="#fbeee3" stroke="#b4531a" stroke-width="2"/><path d="M30 30h20" stroke="#b4531a" stroke-width="3" stroke-linecap="round"/></svg><p><b>In plain words:</b> a list of subjects to hide, like start-up funding news. Hidden stories are put aside, never deleted, and a story you would clearly love still gets through. Describe what you dislike in your own words and Hamsa can draft the list for you.</p></div>
+        <div id="groups"></div>
+        <div class="row"><button id="add-group" class="secondary" type="button">Add a group by hand</button></div>
+        <div class="card">
+          <label class="field"><span>Describe what you do not want to see</span><textarea id="draft-text" rows="3" placeholder="In your own words. For example: start-up launches, funding rounds and hiring posts."></textarea></label>
+          <div class="row"><button id="draft" class="primary" type="button">Draft rules for me</button><button id="test" class="secondary" type="button">Test on today's front page</button><span id="bl-status" class="status" role="status"></span></div>
+          <small class="hint">Drafting uses your AI key once. Testing changes nothing; it only shows what each group would have hidden today.</small>
+          <div id="test-out"></div>
+        </div>
+        <div id="suggest" class="card" hidden></div>
+        <div class="row"><button id="bl-export" class="secondary" type="button">Share: export blocklist file</button><label class="secondary filebtn">Import a shared file<input id="bl-import" type="file" accept=".json" hidden></label></div>
+      </section>
 
-    <div id="suggest" class="panel" hidden></div>
+      <!-- ======================= SCORING ======================= -->
+      <section class="sec" id="s-score">
+        <div class="sec-head"><span class="tile t-ochre"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16V9M12 16V5M17 16v-4"/></svg></span><div><h2>Scoring</h2><p>Where the lines are drawn.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><rect x="6" y="26" width="68" height="10" rx="5" fill="#ebe5da"/><rect x="6" y="26" width="46" height="10" rx="5" fill="#2f6a3a"/><path d="M20 18v26M44 18v26" stroke="#7d5a0c" stroke-width="2" stroke-dasharray="3 3"/><text x="14" y="14" font-size="8" fill="#7d5a0c">floor</text><text x="38" y="14" font-size="8" fill="#2f6a3a">keep</text></svg><p><b>In plain words:</b> every story and comment gets a mark from 0 to 1. Above the <em>keep</em> line it is shown first; between the lines it waits in <em>maybe</em>; below the floor it is set aside. Most people never need to touch these.</p></div>
+        <div class="card">
+          <div class="grid">
+            <label class="field"><span>Keep at or above</span><input id="sc-keepAt" type="number" min="0" max="1" step="0.05"></label>
+            <label class="field"><span>Maybe at or above (the floor)</span><input id="sc-maybeAt" type="number" min="0" max="1" step="0.05"></label>
+            <label class="field"><span>Ceiling (how fast marks rise)</span><input id="sc-ceiling" type="number" min="0.1" max="5" step="0.05"></label>
+            <label class="field"><span>A blocked story still shows at or above</span><input id="sc-blockOverrideAt" type="number" min="0" max="1.01" step="0.05"></label>
+            <label class="field"><span>Discover picks among comments</span><input id="sc-stretchMax" type="number" min="0" max="10" step="1"></label>
+            <label class="field"><span>Comments below the floor</span><select id="gate"><option value="on">Shown, not sent to the AI</option><option value="off">Sent to the AI too</option></select></label>
+            <label class="field"><span>Author karma</span><select id="karma"><option value="on">Use (from HN's public API)</option><option value="off">Do not use</option></select></label>
+          </div>
+          <p class="hint">The mark is <code>1 − e^(−2 × total ÷ ceiling)</code>, where the total adds up every reason shown under "Why this score".</p>
+          <div class="row"><button id="sc-reset" class="secondary" type="button">Reset to starting values</button></div>
+        </div>
+      </section>
 
-    <div class="row">
-      <button id="bl-export" class="secondary" type="button">Export blocklist file</button>
-      <label class="secondary filebtn">Import a shared file<input id="bl-import" type="file" accept=".json" hidden></label>
-    </div>
+      <!-- ======================= AI ======================= -->
+      <section class="sec" id="s-ai">
+        <div class="sec-head"><span class="tile t-olive"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/></svg></span><div><h2>AI summaries</h2><p>Optional. Only when you press Summarise.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><rect x="8" y="10" width="40" height="30" rx="8" fill="#fffaf3" stroke="#6b7a3a" stroke-width="2"/><path d="M16 20h24M16 27h16" stroke="#6b7a3a" stroke-width="2" stroke-linecap="round"/><path d="M20 40l-4 8 10-8" fill="#fffaf3" stroke="#6b7a3a" stroke-width="2"/><circle cx="62" cy="26" r="11" fill="#f3e5bd" stroke="#7d5a0c" stroke-width="2"/><text x="57" y="31" font-size="13" fill="#7d5a0c">₹</text></svg><p><b>In plain words:</b> if you add a key from an AI company, Hamsa can write a short summary of a long discussion, using only the comments that matter to you. You pay the AI company directly, usually less than a rupee a time, and Hamsa shows you the cost each time.</p></div>
+        <div id="providers"></div>
+        <div class="row"><select id="preset" aria-label="AI company"></select><button id="add-provider" class="secondary" type="button">Add this company</button></div>
+        <details class="card more">
+          <summary>Summary limits and prices</summary>
+          <div class="grid">
+            <label class="field"><span>Most comment text sent (tokens)</span><input id="budget" type="number" min="2000" max="200000" step="1000"></label>
+            <label class="field"><span>Longest answer (tokens)</span><input id="maxout" type="number" min="400" max="8000" step="100"></label>
+            <label class="field"><span>Rupees per US dollar</span><input id="fx" type="number" min="1" step="0.5"></label>
+            <label class="field"><span>Learning from you</span><select id="learning"><option value="implicit">Tags and saves</option><option value="thumbs">Tags, saves and thumbs</option><option value="off">Off</option></select></label>
+          </div>
+          <label class="field"><span>Price overrides (JSON: model id to {"in": USD, "out": USD} per million tokens)</span><textarea id="prices" rows="3" spellcheck="false"></textarea></label>
+        </details>
+      </section>
 
-    <h2>Scoring</h2>
-    <p class="lede">Every story and comment gets a score from 0 to 1: the points of each signal are added up, then scaled with <code>1 - exp(-2 × total ÷ ceiling)</code>. These are starting values, to be tuned on real threads.</p>
-    <div class="grid">
-      <label class="field"><span>Keep at or above</span><input id="sc-keepAt" type="number" min="0" max="1" step="0.05"></label>
-      <label class="field"><span>Maybe at or above</span><input id="sc-maybeAt" type="number" min="0" max="1" step="0.05"></label>
-      <label class="field"><span>Ceiling (provisional)</span><input id="sc-ceiling" type="number" min="0.1" max="5" step="0.05"></label>
-      <label class="field"><span>A blocked story is kept at or above</span><input id="sc-blockOverrideAt" type="number" min="0" max="1.01" step="0.05"></label>
-      <label class="field"><span>One stretch pick per this many keeps</span><input id="sc-stretchPerKeeps" type="number" min="1" max="20" step="1"></label>
-      <label class="field"><span>Most stretch picks per page</span><input id="sc-stretchMax" type="number" min="0" max="10" step="1"></label>
-      <label class="field"><span>Front pages to merge</span><input id="sc-pages" type="number" min="1" max="6" step="1"></label>
-      <label class="field"><span>Comments below the floor</span><select id="gate"><option value="on">Shown, not sent to the model</option><option value="off">Sent to the model too</option></select></label>
-      <label class="field"><span>Author karma</span><select id="karma"><option value="on">Read from HN's public API (cached a week)</option><option value="off">Do not use</option></select></label>
-    </div>
-    <div class="row"><button id="sc-reset" class="secondary" type="button">Reset to starting values</button></div>
+      <!-- ======================= SYNC ======================= -->
+      <section class="sec" id="s-sync">
+        <div class="sec-head"><span class="tile t-plum"><svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg></span><div><h2>Backup and sync</h2><p>Keep everything safe, and take it with you.</p></div></div>
+        <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><path d="M22 44a11 11 0 0 1-1-22 14 14 0 0 1 27-3 10 10 0 0 1 9 25z" fill="#f6eaf2" stroke="#6e3561" stroke-width="2"/><rect x="6" y="46" width="22" height="10" rx="2" fill="#fffaf3" stroke="#c9895a" stroke-width="1.5"/><rect x="52" y="46" width="22" height="10" rx="2" fill="#fffaf3" stroke="#c9895a" stroke-width="1.5"/><path d="M17 46v-6M63 46v-6" stroke="#6e3561" stroke-width="2" stroke-dasharray="2 2"/></svg><p><b>In plain words:</b> your settings, likes, dislikes and blocklist can be saved as one file, or kept in step across your computers automatically. Your AI keys and tokens stay private unless you tick the box to include them.</p></div>
 
-    <h2>Providers</h2>
-    <p class="lede">Bring your own keys. Keys stay in this browser and are sent only to the provider you add them for. Test a key to load its models, then tick the ones you want in the Summarise menu.</p>
-    <div id="providers"></div>
-    <div class="row">
-      <select id="preset" aria-label="Provider preset"></select>
-      <button id="add-provider" class="secondary" type="button">Add provider</button>
-    </div>
+        <div class="cards3">
+          <div class="card option">
+            <span class="otile"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg></span>
+            <h3>A backup file</h3>
+            <p class="hint">One JSON file (an open format). Restore it in any browser that runs Hamsa.</p>
+            <label class="check"><input type="checkbox" id="bk-log" checked> Include my reading log</label>
+            <label class="check"><input type="checkbox" id="bk-keys"> Include my keys and tokens</label>
+            <div class="row"><button id="bk-export" class="primary" type="button">Download backup</button><label class="secondary filebtn">Restore<input id="bk-import" type="file" accept=".json" hidden></label></div>
+          </div>
+          <div class="card option">
+            <span class="otile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12a4 4 0 0 1 7-2.6M16 12a4 4 0 0 1-7 2.6"/><path d="M15 6.5v3h-3M9 17.5v-3h3"/></svg></span>
+            <h3>Firefox Sync</h3>
+            <p class="hint">Automatic, through your Firefox account, on every Firefox where you are signed in. No keys, no reading log.</p>
+            <div class="field-row"><span>Keep in step</span><label class="switch"><input type="checkbox" id="sync-firefox"><span></span></label></div>
+            <div class="row"><button id="sync-firefox-now" class="secondary" type="button">Sync now</button></div>
+            <small id="sync-firefox-status" class="status"></small>
+          </div>
+          <div class="card option">
+            <span class="otile"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.8V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z" fill="currentColor" stroke="none"/></svg></span>
+            <h3>GitHub (private gist)</h3>
+            <p class="hint">Works anywhere: another browser, another machine. Needs a GitHub token with the <code>gist</code> permission.</p>
+            <div class="keyrow"><input id="gist-token" type="password" placeholder="GitHub token" autocomplete="off" spellcheck="false" aria-label="GitHub token"><button id="gist-eye" class="secondary eye" type="button">Show</button></div>
+            <input id="gist-id" type="text" placeholder="Gist id (optional)" aria-label="Gist id" autocomplete="off" spellcheck="false">
+            <label class="check"><input type="checkbox" id="gist-auto"> Push automatically after changes</label>
+            <label class="check"><input type="checkbox" id="gist-keys"> Include my keys and tokens</label>
+            <div class="row"><button id="gist-push" class="primary" type="button">Push</button><button id="gist-pull" class="secondary" type="button">Pull</button></div>
+            <small id="gist-status" class="status"></small>
+          </div>
+        </div>
+      </section>
 
-    <h2>Summary</h2>
-    <div class="grid">
-      <label class="field"><span>Comment budget (tokens)</span><input id="budget" type="number" min="2000" max="200000" step="1000"></label>
-      <label class="field"><span>Max output tokens</span><input id="maxout" type="number" min="400" max="8000" step="100"></label>
-      <label class="field"><span>Rupees per US dollar</span><input id="fx" type="number" min="1" step="0.5"></label>
-      <label class="field"><span>Learning from you</span><select id="learning"><option value="implicit">Tags and saves</option><option value="thumbs">Tags, saves and thumbs</option><option value="off">Off</option></select></label>
-    </div>
-    <label class="field"><span>Price overrides (JSON: model id to {"in": USD, "out": USD} per million tokens)</span><textarea id="prices" rows="3" spellcheck="false"></textarea></label>
-
-    <h2>Usage</h2>
-    <div id="usage" class="tablewrap"></div>
-
-    <h2>Recent problems</h2>
-    <p class="lede">Anything that went wrong on Hacker News, in the digest or here, newest first. Copy it into a bug report if something keeps failing.</p>
-    <div id="errors"></div>
-    <div class="row"><button id="err-copy" class="secondary" type="button">Copy</button><button id="err-clear" class="secondary" type="button">Clear</button></div>
+      <!-- ======================= ACTIVITY ======================= -->
+      <section class="sec" id="s-activity">
+        <div class="sec-head"><span class="tile t-rust"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><div><h2>Activity</h2><p>What the AI cost you, and anything that went wrong.</p></div></div>
+        <div class="card"><h3>AI usage</h3><div id="usage" class="tablewrap"></div></div>
+        <div class="card">
+          <h3>Recent problems</h3>
+          <p class="hint">If something keeps failing, copy this and send it along with a short note.</p>
+          <div id="errors"></div>
+          <div class="row"><button id="err-copy" class="secondary" type="button">Copy</button><button id="err-clear" class="secondary" type="button">Clear</button></div>
+        </div>
+        <p class="foot">Hamsa <span id="version"></span> · scores and filters on this computer · <a href="https://github.com/agravaaniresearch/hamsa" target="_blank" rel="noopener noreferrer">source and changelog</a></p>
+      </section>
+    </main>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
   <script type="module" src="options.js"></script>

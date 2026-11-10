@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS = {
   justify: false,
   density: "comfortable",  // comfortable | compact
   darkStyle: "warm",       // warm | neutral | black
+  syncFirefox: false,      // keep settings, likes and blocklist in step through Firefox Sync
   skin: true,              // theme the plain HN pages Hamsa does not redraw (profiles, replies, Original view)
   font: "system",          // body font: system | inter | literata | source-serif | atkinson | plex-mono
   budgetTokens: 30000,

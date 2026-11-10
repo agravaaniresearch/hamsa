@@ -16,7 +16,7 @@ function h(tag, attrs = {}, ...kids) {
 }
 const send = async (msg) => { const r = await api.runtime.sendMessage(msg); if (r?.error) throw new Error(r.error); return r; };
 const fmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(1)}k` : (n || 0).toLocaleString());
-const LABEL = { keep: "KEEP", maybe: "MAYBE", stretch: "STRETCH" };
+const LABEL = { keep: "KEEP", maybe: "MAYBE", stretch: "DISCOVER" };
 let digest = null;
 
 function render() {

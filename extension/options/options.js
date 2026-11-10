@@ -304,6 +304,7 @@ function initScoring() {
   const sc = { ...SCORING_DEFAULTS, ...state.settings.scoring };
   const keys = Object.keys(SCORING_DEFAULTS);
   for (const k of keys) {
+    if (!$(`sc-${k}`)) continue;
     $(`sc-${k}`).value = sc[k];
     $(`sc-${k}`).addEventListener("change", async (e) => {
       const { settings = {} } = await api.storage.local.get("settings");
@@ -317,7 +318,7 @@ function initScoring() {
   $("gate").addEventListener("change", (e) => patchSettings({ gate: e.target.value === "on" }));
   $("sc-reset").addEventListener("click", async () => {
     await patchSettings({ scoring: { ...SCORING_DEFAULTS } });
-    for (const k of keys) $(`sc-${k}`).value = SCORING_DEFAULTS[k];
+    for (const k of keys) if ($(`sc-${k}`)) $(`sc-${k}`).value = SCORING_DEFAULTS[k];
     notify("ok", "Scoring reset to starting values");
   });
 }
@@ -379,6 +380,119 @@ function renderUsage() {
     days.length ? table(["Day", "Runs", "Tokens in", "Tokens out", "Cost (USD)"], days.map(([d, u]) => h("tr", {}, h("td", {}, d), h("td", {}, String(u.runs)), h("td", {}, u.input.toLocaleString()), h("td", {}, u.output.toLocaleString()), h("td", {}, u.usd ? u.usd.toFixed(4) : "0")))) : null].filter(Boolean));
 }
 
+// ---- hero status and checklist ----
+async function drawStatus() {
+  const [info, sync, { prefs }, perm] = await Promise.all([
+    send({ type: "graph-info" }).catch(() => ({ ready: false })),
+    send({ type: "sync-info" }).catch(() => ({})),
+    api.storage.local.get("prefs"),
+    api.permissions.contains({ origins: [HN_ORIGIN] }),
+  ]);
+  state = await getState();
+  const usable = state.providers.filter((p) => p.keyStatus && (p.keyStatus.state === "ok" || p.keyStatus.state === "unverified"));
+  const likes = Object.values(prefs?.items || {});
+  const set = (id, on, text, warn) => { const el = $(id); el.className = `stat${on ? " on" : warn ? " warn" : ""}`; el.lastChild.textContent = text; };
+  set("st-interests", info.ready, info.ready ? `Interests: ${info.tags.toLocaleString()} topics` : "Interests: not synced yet", !info.ready);
+  set("st-model", usable.length, usable.length ? `AI: ${usable[0].name}` : "AI summaries: off");
+  const syncOn = state.settings.syncFirefox || sync.gist?.id;
+  set("st-sync", syncOn, state.settings.syncFirefox && sync.gist?.id ? "Sync: Firefox and GitHub" : state.settings.syncFirefox ? "Sync: Firefox" : sync.gist?.id ? "Sync: GitHub" : "Sync: off");
+  set("st-likes", likes.length, `${likes.filter((x) => x.v === "like").length} likes · ${likes.filter((x) => x.v === "dislike").length} dislikes`);
+  const done = (id, ok) => $(id).classList.toggle("done", !!ok);
+  done("ck-perm", perm); done("ck-src", info.ready); done("ck-ai", usable.length); done("ck-sync", syncOn || sync.backupAt);
+}
+
+// Highlight the section in view.
+function initNav() {
+  const links = new Map([...document.querySelectorAll(".nav a")].map((a) => [a.getAttribute("href").slice(1), a]));
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { for (const a of links.values()) a.classList.remove("on"); links.get(e.target.id)?.classList.add("on"); }
+  }, { rootMargin: "-30% 0px -60% 0px" });
+  for (const id of links.keys()) { const el = document.getElementById(id); if (el) io.observe(el); }
+}
+
+// ---- likes and dislikes ----
+async function drawLikes() {
+  const { prefs } = await api.storage.local.get("prefs");
+  const items = Object.entries(prefs?.items || {}).sort((a, b) => b[1].at - a[1].at);
+  const nl = items.filter(([, x]) => x.v === "like").length, nd = items.length - nl;
+  $("likes-count").textContent = items.length ? `${nl} liked, ${nd} disliked${items.some(([, x]) => x.source === "hn") ? `, ${items.filter(([, x]) => x.source === "hn").length} of them read from your HN votes` : ""}.` : "None yet. Use the thumbs on any story or comment.";
+  $("likes-list").replaceChildren(...items.slice(0, 80).map(([id, x]) => h("div", { class: "like-row" },
+    h("span", { class: `pill ${x.v}` }, x.v === "like" ? "LIKE" : "DISLIKE"),
+    h("a", { class: "lt", href: `https://news.ycombinator.com/item?id=${id}`, target: "_blank", rel: "noopener noreferrer", title: x.title }, x.title || `${x.kind} ${id}`),
+    h("span", { class: "status" }, x.source === "hn" ? "from HN" : x.kind),
+    h("button", { type: "button", title: "Forget this", "aria-label": "Forget this", onclick: async () => { await send({ type: "pref", item: { id, kind: x.kind }, value: null }); drawLikes(); drawStatus(); } }, "×"))));
+  $("likes-clear").onclick = async () => { await send({ type: "prefs-clear" }); notify("ok", "Likes and dislikes cleared"); drawLikes(); drawStatus(); };
+}
+
+// ---- backup and sync ----
+function download(name, text, type = "application/json") {
+  const a = h("a", { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function initBackupSync() {
+  $("bk-export").addEventListener("click", async () => {
+    const r = await send({ type: "backup-export", includeKeys: $("bk-keys").checked, includeLog: $("bk-log").checked });
+    download(`hamsa-backup-${new Date().toISOString().slice(0, 10)}.json`, r.json);
+    await api.storage.local.set({ syncInfo: { ...((await api.storage.local.get("syncInfo")).syncInfo || {}), backupAt: Date.now() } });
+    notify("ok", "Backup downloaded", `${(r.size / 1024).toFixed(0)} KB, format hamsa.backup/1.${$("bk-keys").checked ? " It contains your keys: keep it private." : " Keys are not included."}`);
+    drawStatus();
+  });
+  $("bk-import").addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const r = await send({ type: "backup-import", json: await f.text() });
+      notify("ok", "Backup restored", `Merged ${r.merged.length} kinds of data from Hamsa ${r.from || "?"}. Nothing here was thrown away.`);
+      setTimeout(() => location.reload(), 1200);
+    } catch (err) { notify("bad", "Could not restore", err.message); }
+    e.target.value = "";
+  });
+
+  const ff = $("sync-firefox");
+  ff.checked = !!state.settings.syncFirefox;
+  const ffStatus = async () => {
+    const i = await send({ type: "sync-info" }).catch(() => ({}));
+    $("sync-firefox-status").textContent = i.firefoxPushedAt ? `Last sent ${new Date(i.firefoxPushedAt).toLocaleString()} (${((i.firefoxBytes || 0) / 1024).toFixed(0)} KB of about 100 KB allowed).` : state.settings.syncFirefox ? "On. Nothing sent yet." : "Off.";
+    const g = i.gist || {};
+    $("gist-status").textContent = g.id ? `Gist ${g.id.slice(0, 8)}…${g.pushedAt ? ` · pushed ${new Date(g.pushedAt).toLocaleString()}` : ""}${g.pulledAt ? ` · pulled ${new Date(g.pulledAt).toLocaleString()}` : ""}` : "Not set up.";
+    if (g.id && !$("gist-id").value) $("gist-id").value = g.id;
+    $("gist-auto").checked = !!g.auto; $("gist-keys").checked = !!g.includeKeys;
+    if (g.hasToken && !$("gist-token").value) $("gist-token").placeholder = "Token saved (hidden)";
+  };
+  ff.addEventListener("change", async () => {
+    await patchSettings({ syncFirefox: ff.checked });
+    state.settings.syncFirefox = ff.checked;
+    if (ff.checked) { try { await send({ type: "sync-firefox-now" }); notify("ok", "Firefox Sync is on", "Settings, likes and blocklist now follow you to every Firefox where you are signed in."); } catch (e) { notify("bad", "Firefox Sync failed", e.message); } }
+    ffStatus(); drawStatus();
+  });
+  $("sync-firefox-now").addEventListener("click", async () => {
+    try { await send({ type: "sync-firefox-now" }); notify("ok", "Synced with Firefox"); } catch (e) { notify("bad", "Sync failed", e.message); }
+    ffStatus();
+  });
+
+  const gcfg = (patch) => send({ type: "gist-config", patch });
+  $("gist-eye").addEventListener("click", () => { const i = $("gist-token"); i.type = i.type === "password" ? "text" : "password"; $("gist-eye").textContent = i.type === "password" ? "Show" : "Hide"; });
+  $("gist-token").addEventListener("change", (e) => gcfg({ token: e.target.value.trim() }));
+  $("gist-id").addEventListener("change", (e) => gcfg({ id: e.target.value.trim().replace(/^.*\//, "") || undefined }));
+  $("gist-auto").addEventListener("change", (e) => gcfg({ auto: e.target.checked }));
+  $("gist-keys").addEventListener("change", (e) => gcfg({ includeKeys: e.target.checked }));
+  const askGithub = () => api.permissions.request({ origins: ["https://api.github.com/*", "https://gist.githubusercontent.com/*"] }).catch(() => false);
+  $("gist-push").addEventListener("click", async (e) => {
+    if (!(await askGithub())) return notify("warn", "Permission not given", "Hamsa needs to reach api.github.com to use a gist.");
+    e.target.disabled = true;
+    try { const r = await send({ type: "gist-push" }); notify("ok", "Pushed to GitHub", `Private gist ${r.id.slice(0, 8)}…, ${(r.bytes / 1024).toFixed(0)} KB.`); } catch (err) { notify("bad", "Push failed", err.message); }
+    e.target.disabled = false; ffStatus(); drawStatus();
+  });
+  $("gist-pull").addEventListener("click", async (e) => {
+    if (!(await askGithub())) return notify("warn", "Permission not given", "Hamsa needs to reach api.github.com to use a gist.");
+    e.target.disabled = true;
+    try { const r = await send({ type: "gist-pull" }); notify("ok", "Pulled from GitHub", `Merged ${r.merged.length} kinds of data.`); setTimeout(() => location.reload(), 1200); } catch (err) { notify("bad", "Pull failed", err.message); }
+    e.target.disabled = false;
+  });
+  await ffStatus();
+}
+
 async function renderErrors() {
   const { errors = [] } = await api.storage.local.get("errors");
   $("errors").replaceChildren(errors.length
@@ -405,5 +519,10 @@ async function init() {
   renderUsage();
   await renderErrors();
   await refreshGraph();
+  await drawLikes();
+  await initBackupSync();
+  $("version").textContent = api.runtime.getManifest().version;
+  initNav();
+  await drawStatus();
 }
 init();

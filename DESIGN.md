@@ -7,27 +7,27 @@ Hamsa is the swan said to separate milk from water (nira-kshira-viveka). It sepa
 1. **Rules first, model last.** Cleaning, relevance and ranking are deterministic and free. The model is called only when you press Summarise, and only on what survived.
 2. **Nothing is deleted.** Every story and comment lands in a bucket with the reason it landed there. Removed and held-back items are logged and can be shown again.
 3. **The score always travels with its reasons.** A 0 to 1 number is never shown alone; one tap shows every signal and its points.
-4. **Recall over precision in the cheap layer.** Rebuttals deep in a chain are protected, a strong match overrides a block, and a stretch slice is reserved for things outside your tags.
+4. **Recall over precision in the cheap layer.** Rebuttals deep in a chain are protected, a strong match overrides a block, and a Discover section is reserved for things outside your tags.
 5. **Your sources, your keys.** Interests come from your own bookmarks, tags, favourites and, if you allow it, history. Keys stay in the browser.
 
 ## Flow
 
 | Level | What happens | Model |
 |---|---|---|
-| Front page | Pages 1 to 4 merged into one list; every story scored on its title, site and your favourites; blocklist applied; keep, stretch, maybe shown, toss hidden behind a chip | none |
+| Front page | Pages 1 to 5 merged into one list; every story scored on its title, site and your favourites; blocklist applied; Discover first, then keep and maybe; toss hidden behind a chip | none |
 | Thread | Every page of the thread read; crust removed (dead, downvoted, abusive, flame chains, meta, quote-only, short); comments scored against your tags; off-topic comments held back; the tree redrawn with folds that say what was hidden and why | none |
 | Summary | One call with your key on the comments that passed; tokens sent and received, and the cost, shown on the card and added to today's total in the header | on request |
-| Digest | Once a day: the front pages scored and grouped into topics, keep and stretch first | none |
+| Digest | Once a day: the front pages scored and grouped into topics, Discover and keep first | none |
 
 ## Reading a thread
 
-The default is to scroll through what survives: keep, stretch and maybe comments in one column, best first, each reply saying what it answers, and each rebuttal sitting directly under the comment it answers. Every comment folds to a line; j and k move, c collapses. The tree view is there to see the thread in place, with folds that say what was hidden and why, or with the tossed folds collapsed away.
+The default is to scroll through what survives: keep, discover and maybe comments in one column, best first, each reply saying what it answers, and each rebuttal sitting directly under the comment it answers. Every comment folds to a line; j and k move, c collapses. The tree view is there to see the thread in place, with folds that say what was hidden and why, or with the tossed folds collapsed away.
 
 ## Buckets
 
 - **Keep**: score at or above the keep line.
 - **Maybe**: matches your interests weakly. Held, and re-scored whenever your tags or rules change.
-- **Stretch**: matches none of your tags but shows signs of a substantial discussion. A small fixed share.
+- **Discover**: new to you, and worth a look by HN's own signals. This is the real keep: what you would not have found yourself. It leads the page.
 - **Toss**: below the floor, blocked, or dismissed by you. Hidden, logged, restorable.
 - **Removed** (comments only): crust. Shown on request from the fold where it was cut.
 
@@ -42,6 +42,10 @@ An open JSON file anyone can edit, share and import. Groups switch on and off as
 ## Learning from what you open
 
 Opening a story, a thread or a link is the cheapest honest signal there is. Hamsa remembers it in the browser, uses it straight away (sites you open, titles like ones you opened, tags you click), and exports it with everything you were shown as one JSON line per story, so a small local model can later be tuned on your own choices.
+
+## Taste, and taking it with you
+
+Thumbs on any story or comment, and your own HN votes, teach Hamsa your taste in this browser. Everything you set and taught it is one open JSON format: a file you can keep, Firefox Sync for every Firefox you use, or a private GitHub gist for anywhere else. Keys stay out unless you put them in.
 
 ## Interface
 

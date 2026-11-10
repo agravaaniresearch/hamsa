@@ -10,7 +10,9 @@ import { fetchAllItems, saveBookmark } from "./lib/raindrop.js";
 import { parseFront, mergeFront, groupDuplicates } from "./lib/front.js";
 import { tokenize } from "./lib/tokenize.js";
 import { domainOf } from "./lib/profile.js";
-import { scoreStories, RULES_VERSION } from "./lib/score.js";
+import { emptyPrefs, setPref, derivePrefs } from "./lib/prefs.js";
+import { makeBackup, readBackup, mergeBackup, toSyncChunks } from "./lib/backup.js";
+import { scoreStories, RULES_VERSION, SCORING_DEFAULTS } from "./lib/score.js";
 import { compileBlocklist, normaliseBlocklist, testBlocklist, suggestFromDismissals, DRAFT_PROMPT, DRAFT_SCHEMA } from "./lib/blocklist.js";
 import { buildProfile, bookmarkTreeToItems, parseHnList } from "./lib/profile.js";
 import { clusterStories } from "./lib/cluster.js";
@@ -42,12 +44,25 @@ function activeProvider(state, providerId, model) {
 }
 
 // ---- front page ----
-async function scoreFront(state, stories) {
+async function loadPrefs() {
+  const { prefs } = await api.storage.local.get("prefs");
+  return prefs?.items ? prefs : emptyPrefs();
+}
+
+async function scoreFront(state, stories, { karmaBudget = 0 } = {}) {
   const graph = await loadGraph();
   const { opened = null } = await api.storage.local.get("opened");
+  // Stories you upvoted on HN count as likes (never over your own thumbs).
+  let prefs = await loadPrefs();
+  const voted = stories.filter((st) => st.voted && prefs.items[String(st.id)]?.v !== "like");
+  if (voted.length) {
+    for (const st of voted) prefs = setPref(prefs, { id: st.id, kind: "story", title: st.title, domain: st.domain }, "like", "hn");
+    await save({ prefs });
+  }
+  const karma = state.settings.karma === false ? null : karmaBudget ? await karmaFor(stories.map((st) => st.by), karmaBudget) : await karmaFor([], 0);
   const v = scoreStories(stories, {
     graph, profile: state.profile, blocks: compileBlocklist(state.blocklist),
-    scoring: state.settings.scoring, dismissed: state.dismissed.map((d) => d.id), opened,
+    scoring: state.settings.scoring, dismissed: state.dismissed.map((d) => d.id), opened, prefs: derivePrefs(prefs), karma,
   });
   // Duplicate submissions: the best-voted one leads, takes the best bucket and score of the group.
   const byId = new Map(v.map((x) => [x.id, x]));
@@ -121,7 +136,7 @@ async function doFront({ pages }) {
   const merged = mergeFront(pages.map((h) => parseFront(parseDoc(h))));
   if (merged.me && merged.me !== state.settings.hnUser) await patchSettings({ hnUser: merged.me });
   lastFront = { stories: merged.stories, at: Date.now() };
-  const { verdicts, ready } = await scoreFront(state, merged.stories);
+  const { verdicts, ready } = await scoreFront(state, merged.stories, { karmaBudget: 800 });
   if (state.settings.readingLog !== false) recordImpressions(merged.stories, verdicts).catch(() => {});
   const counts = { keep: 0, maybe: 0, stretch: 0, toss: 0 };
   for (const x of verdicts) counts[x.bucket]++;
@@ -165,6 +180,8 @@ async function karmaFor(users, budgetMs = 1200) {
   if (!karmaMemo) karmaMemo = (await api.storage.local.get("karma")).karma || {};
   const now = Date.now();
   const want = [...new Set(users.filter(Boolean))].filter((u) => !karmaMemo[u] || now - karmaMemo[u][1] > KARMA_TTL).slice(0, 200);
+  const known = () => Object.fromEntries(Object.entries(karmaMemo).map(([u, [k]]) => [u, k]));
+  if (!want.length || budgetMs <= 0) return known();
   const one = async (u) => {
     try {
       const r = await fetch(`https://hacker-news.firebaseio.com/v0/user/${encodeURIComponent(u)}/karma.json`, { credentials: "omit" });
@@ -178,7 +195,7 @@ async function karmaFor(users, budgetMs = 1200) {
     await save({ karma: karmaMemo });
   })();
   await Promise.race([run, sleep(budgetMs)]);
-  return Object.fromEntries(Object.entries(karmaMemo).map(([u, [k]]) => [u, k]));
+  return known();
 }
 
 async function analyse(id, pages) {
@@ -188,6 +205,12 @@ async function analyse(id, pages) {
   const thread = mergePages(html, parseDoc);
   const karma = state.settings.karma === false ? null : await karmaFor(thread.comments.filter((c) => c.status === "ok").map((c) => c.author));
   const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate, karma });
+  const mine = thread.comments.filter((c) => c.my_vote);
+  if (mine.length) {
+    let prefs = await loadPrefs();
+    for (const c of mine) prefs = setPref(prefs, { id: c.id, kind: "comment", title: c.text.slice(0, 160), tags: (c.verdict?.reasons || []).filter((r) => r.kind === "tag").map((r) => r.tag) }, c.my_vote === "up" ? "like" : "dislike", "hn");
+    await save({ prefs });
+  }
   prepared.set(id, { thread, prep });
   return { state, graph, thread, prep };
 }
@@ -209,7 +232,8 @@ async function doThread({ id, pages }) {
   return {
     id, title: thread.story.title, domain: thread.story.link_domain, points: thread.story.points, author: thread.story.author,
     funnel: prep.funnel, dropped: { unavailable: stats.unavailable, ...stats.pruned }, tokens: prep.tokens, context: thread.story.context,
-    verdicts: commentVerdicts(thread), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
+    storyPref: (await loadPrefs()).items[String(id)]?.v || null,
+    verdicts: commentVerdicts(thread), prefs: Object.fromEntries(Object.entries((await loadPrefs()).items).filter(([, x]) => x.kind === "comment").map(([k, x]) => [k, x.v])), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
     graphReady: !!graph?.size, estimate, model, rules: RULES_VERSION,
     cached: cached && cached.rules === RULES_VERSION ? cached : null,
     usage: await todayUsage(),
@@ -362,6 +386,8 @@ async function doSync() {
   const prev = await loadGraph();
   const gstate = buildState(items, { excluded: state.settings.excludedTags });
   if (prev) { gstate.adj = prev.state.adj; gstate.muted = prev.state.muted; } // keep what you taught it
+  const { pendingTeach } = await api.storage.local.get("pendingTeach");
+  if (pendingTeach) { gstate.adj = { ...pendingTeach.adj, ...gstate.adj }; gstate.muted = [...new Set([...(gstate.muted || []), ...(pendingTeach.muted || [])])]; await api.storage.local.remove("pendingTeach"); }
   const profile = buildProfile({ items, favourites, history, sources });
   await save({ graph: gstate, profile, graphSyncedAt: Date.now() });
   const g = new TagGraph(gstate);
@@ -487,18 +513,143 @@ const handlers = {
   },
   "test-key": doTestKey,
   "ui-state": doUiState,
+  "prefs-clear": async () => { await save({ prefs: emptyPrefs() }); return { ok: true }; },
+  "backup-export": doBackupExport,
+  "backup-import": doBackupImport,
+  "sync-firefox-now": async () => { const pull = await firefoxPull(); const push = await firefoxPush(); return { pull, push, info: await syncState() }; },
+  "sync-info": async () => { const { gist = {} } = await api.storage.local.get("gist"); return { ...(await syncState()), gist: { id: gist.id || "", url: gist.url || "", pushedAt: gist.pushedAt, pulledAt: gist.pulledAt, auto: !!gist.auto, includeKeys: !!gist.includeKeys, hasToken: !!gist.token } }; },
+  "gist-config": async ({ patch }) => { const { gist = {} } = await api.storage.local.get("gist"); await api.storage.local.set({ gist: { ...gist, ...patch } }); return { ok: true }; },
+  "gist-push": gistPush,
+  "gist-pull": gistPull,
   opened: doOpened,
+  pref: async ({ item, value }) => {
+    let prefs = await loadPrefs();
+    prefs = setPref(prefs, item, value, "you");
+    await save({ prefs });
+    if (value) await doOpened({ entry: { kind: item.kind === "comment" ? "link" : "story", id: item.id, title: item.title, domain: item.domain, tags: item.tags, page: value } }).catch(() => {});
+    return { ok: true, counts: derivePrefs(prefs).counts };
+  },
   "open-tab": doOpenTab,
   "export-log": doExportLog,
   "log-clear": async () => { await save({ readingLog: [], opened: emptyOpened(), impressions: {} }); return { ok: true }; },
   "set-ui": async ({ patch }) => {
     const allowed = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => ["theme", "layer", "order", "active", "threadView", "threadSort", "collapseTossed", "linkTarget"].includes(k)));
+    if (patch?.pages) {
+      const { settings = {} } = await api.storage.local.get("settings");
+      allowed.scoring = { ...SCORING_DEFAULTS, ...(settings.scoring || {}), pages: Math.max(1, Math.min(6, Number(patch.pages) || 5)) };
+    }
     await patchSettings(allowed);
     return { ok: true };
   },
   "open-settings": async () => { await api.runtime.openOptionsPage(); return { ok: true }; },
   "open-digest": async () => { await api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }); return { ok: true }; },
 };
+
+// ---- backup, import and sync ----
+const VERSION = api.runtime.getManifest().version;
+const BACKUP_KEYS = ["settings", "blocklist", "prefs", "dismissed", "opened", "graph", "providers", "raindropToken", "readingLog", "impressions"];
+async function currentStore() { return api.storage.local.get(BACKUP_KEYS); }
+
+async function applyMerge(patch) {
+  const { teach, ...rest } = patch;
+  if (teach) {
+    const g = await loadGraph();
+    if (g) { g.state.adj = { ...teach.adj, ...g.state.adj }; g.state.muted = [...new Set([...(g.state.muted || []), ...(teach.muted || [])])]; await saveGraph(g); }
+    else rest.pendingTeach = teach;
+  }
+  syncPaused = true;
+  try { await save(rest); } finally { setTimeout(() => { syncPaused = false; }, 1000); }
+  return Object.keys(patch);
+}
+
+async function doBackupExport({ includeKeys = false, includeLog = true }) {
+  const b = makeBackup(await currentStore(), { version: VERSION, includeKeys, includeLog });
+  return { json: JSON.stringify(b, null, 1), size: JSON.stringify(b).length };
+}
+
+async function doBackupImport({ json }) {
+  const inc = readBackup(typeof json === "string" ? JSON.parse(json) : json);
+  const keys = await applyMerge(mergeBackup(await currentStore(), inc));
+  return { ok: true, merged: keys, from: inc.app_version, at: inc.exported_at };
+}
+
+// Firefox Sync: the same backup, without keys or the reading log, in storage.sync.
+let syncPaused = false, syncTimer = null, lastPushed = "";
+async function syncState() { const { syncInfo = {} } = await api.storage.local.get("syncInfo"); return syncInfo; }
+async function setSyncInfo(patch) { const cur = await syncState(); await api.storage.local.set({ syncInfo: { ...cur, ...patch } }); }
+
+async function firefoxPush() {
+  const parts = toSyncChunks(makeBackup(await currentStore(), { version: VERSION, includeKeys: false, includeLog: false }));
+  const joined = parts.join("");
+  if (joined === lastPushed) return { ok: true, unchanged: true };
+  const old = await api.storage.sync.get(null);
+  const items = { "hamsa:meta": { n: parts.length, at: Date.now(), v: VERSION } };
+  parts.forEach((p, i) => { items[`hamsa:${i}`] = p; });
+  await api.storage.sync.set(items);
+  const stale = Object.keys(old).filter((k) => /^hamsa:\d+$/.test(k) && Number(k.split(":")[1]) >= parts.length);
+  if (stale.length) await api.storage.sync.remove(stale);
+  lastPushed = joined;
+  await setSyncInfo({ firefoxPushedAt: Date.now(), firefoxBytes: joined.length });
+  return { ok: true, bytes: joined.length };
+}
+
+async function firefoxPull() {
+  const all = await api.storage.sync.get(null);
+  const meta = all["hamsa:meta"];
+  if (!meta) return { ok: true, empty: true };
+  const text = Array.from({ length: meta.n }, (_, i) => all[`hamsa:${i}`] || "").join("");
+  const info = await syncState();
+  if (info.firefoxPulledAt && meta.at <= info.firefoxPulledAt) return { ok: true, unchanged: true };
+  const keys = await applyMerge(mergeBackup(await currentStore(), readBackup(JSON.parse(text))));
+  lastPushed = text;
+  await setSyncInfo({ firefoxPulledAt: Date.now() });
+  return { ok: true, merged: keys };
+}
+
+// GitHub: a private (secret) gist holding hamsa-backup.json. Works in any browser that can run Hamsa.
+const GIST_FILE = "hamsa-backup.json";
+async function gistReq(method, path, token, body) {
+  const res = await fetch(`https://api.github.com${path}`, { method, headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 401) throw new Error("GitHub rejected the token. It needs the gist scope.");
+  if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
+  return res.json();
+}
+async function gistPush() {
+  const { gist = {} } = await api.storage.local.get("gist");
+  if (!gist.token) throw new Error("Add a GitHub token first.");
+  const content = JSON.stringify(makeBackup(await currentStore(), { version: VERSION, includeKeys: !!gist.includeKeys, includeLog: gist.includeLog !== false }), null, 1);
+  const body = { description: "Hamsa backup (settings, likes, blocklist)", files: { [GIST_FILE]: { content } } };
+  const j = gist.id ? await gistReq("PATCH", `/gists/${gist.id}`, gist.token, body) : await gistReq("POST", "/gists", gist.token, { ...body, public: false });
+  await api.storage.local.set({ gist: { ...gist, id: j.id, url: j.html_url, pushedAt: Date.now() } });
+  return { ok: true, id: j.id, url: j.html_url, bytes: content.length };
+}
+async function gistPull() {
+  const { gist = {} } = await api.storage.local.get("gist");
+  if (!gist.token || !gist.id) throw new Error("Add a GitHub token and gist id first (or push once to create the gist).");
+  const j = await gistReq("GET", `/gists/${gist.id}`, gist.token);
+  const f = j.files?.[GIST_FILE];
+  if (!f) throw new Error(`The gist has no ${GIST_FILE}.`);
+  const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+  const keys = await applyMerge(mergeBackup(await currentStore(), readBackup(JSON.parse(text))));
+  await api.storage.local.set({ gist: { ...gist, pulledAt: Date.now() } });
+  return { ok: true, merged: keys };
+}
+
+// Push a little after anything worth syncing changes.
+const SYNCED = ["settings", "blocklist", "prefs", "dismissed", "graph"];
+api.storage.onChanged.addListener((ch, area) => {
+  if (area === "sync") { if (Object.keys(ch).some((k) => k.startsWith("hamsa:"))) settingsSync("pull"); return; }
+  if (syncPaused || !SYNCED.some((k) => ch[k])) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => settingsSync("push"), 8000);
+});
+async function settingsSync(dir) {
+  try {
+    const { settings = {}, gist = {} } = await api.storage.local.get(["settings", "gist"]);
+    if (settings.syncFirefox) await (dir === "pull" ? firefoxPull() : firefoxPush());
+    if (dir === "push" && gist.auto && gist.token) await gistPush();
+  } catch (e) { logError(`sync-${dir}`, e?.message || e); }
+}
 
 // A short log of what went wrong, shown in settings under Recent problems.
 async function logError(where, message) {
@@ -523,6 +674,7 @@ api.runtime.onMessage.addListener((msg) => {
 api.action?.onClicked.addListener(() => api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }));
 
 // The digest is built once a day, the first time the browser starts.
+api.runtime.onStartup.addListener(() => settingsSync("pull"));
 api.runtime.onStartup.addListener(async () => {
   try {
     const { digest } = await api.storage.local.get("digest");

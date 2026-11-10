@@ -68,7 +68,8 @@
       sub?.querySelector(".age") ? h("span", {}, `· ${sub.querySelector(".age").textContent.trim()}`) : null,
       h("span", {}, `· ${data.funnel.comments} comments`),
       h("span", {}, `· thread relevance ${data.threadRelevance.toFixed(2)}`)),
-    top ? h("div", { class: "h-toptext" }, top.cloneNode(true)) : null);
+    top ? h("div", { class: "h-toptext" }, top.cloneNode(true)) : null,
+    h("div", { class: "h-row" }, h("span", { class: "h-note" }, "This story:"), H.thumbs({ id, kind: "story", title: data.title, domain: data.domain, tags: data.context?.tags || [] }, { pref: data.storyPref || null })));
   if (form) {
     const box = h("details", { class: "h-addc" }, h("summary", { class: "h-note", style: "cursor:pointer" }, "Add a comment"));
     box.append(form);
@@ -239,7 +240,7 @@
     const flags = [
       v.rebuttal ? h("span", { class: "h-flag" }, opts.rebut ? `rebuts @${whoOf(opts.replyTo)}` : "rebuttal, protected") : null,
       v.answered && !v.rebuttal ? h("span", { class: "h-flag plain" }, "answered by a rebuttal") : null,
-      v.stretch ? h("span", { class: "h-flag stretch" }, "stretch pick") : null,
+      v.stretch ? h("span", { class: "h-flag stretch" }, "discover: outside your tags") : null,
       v.rule && v.bucket !== "removed" ? h("span", { class: "h-flag plain" }, `not sent: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       v.bucket === "removed" ? h("span", { class: "h-flag plain" }, `removed: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       mode === "context" ? h("span", { class: "h-flag plain" }, "shown for context") : null,
@@ -272,7 +273,8 @@
           h("div", { class: "h-cbody" }, body(r)),
           v.tags.length ? h("div", { class: "h-row", style: "margin-bottom:6px" }, tagButtons(v.tags)) : null,
           why,
-          h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold, dupBtn),
+          h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold, dupBtn, h("span", { class: "h-grow" }),
+            H.thumbs({ id: r.id, kind: "comment", title: clip(textOf(r), 160), tags: v.tags }, prefState(r.id))),
           dupBox))));
     tog.addEventListener("click", () => toggle(r, el));
     el.querySelector(".h-preview").addEventListener("click", () => toggle(r, el));
@@ -289,6 +291,8 @@
     return h("div", { class: "h-fold", style: `margin-left:${Math.min(minDepth, 8) * 20}px` }, h("span", {}, `${group.length} hidden: ${label}`), b);
   }
 
+  const prefStates = new Map();
+  const prefState = (cid) => { if (!prefStates.has(cid)) prefStates.set(cid, { pref: data.prefs?.[cid] || null }); return prefStates.get(cid); };
   const bestKey = (r) => 0.7 * r.v.score + 0.3 * (r.v.quality || 0);
   function survivors() {
     return rows.filter((r) => !r.v.dupOf && r.v.bucket !== "removed" && (show[r.v.bucket] || isProtected(r.v) || forced.has(r.id)));
@@ -342,7 +346,7 @@
     list.replaceChildren(...(view === "survivors" ? survivorsList() : treeList()));
     const counts = { keep: 0, stretch: 0, maybe: 0, toss: 0, removed: 0 };
     for (const r of rows) counts[r.v.bucket]++;
-    const label = { keep: "Keep", stretch: "Stretch", maybe: "Maybe", toss: "Below floor", removed: "Removed" };
+    const label = { keep: "Keep", stretch: "Discover", maybe: "Maybe", toss: "Below floor", removed: "Removed" };
     chips.replaceChildren(...Object.keys(counts).filter((b) => counts[b] || b === "keep").map((b) => {
       const c = h("button", { class: `h-chip ${b}`, type: "button", "aria-pressed": String(show[b]) }, `${label[b]} ${counts[b]}`);
       c.addEventListener("click", () => { show[b] = !show[b]; if (!show[b]) forced.clear(); draw(); });

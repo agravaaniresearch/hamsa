@@ -2,7 +2,7 @@
 
 Everything on this page runs on your computer with no model. A model is called only for a thread summary you ask for, or to draft blocklist rules from your own words.
 
-## The 0 to 1 score (`hamsa.score/1`, rules v0.3)
+## The 0 to 1 score (`hamsa.score/1`, rules v0.4)
 
 Every story and every comment carries four things, never the number alone:
 
@@ -43,9 +43,35 @@ A title fires a tag when every word of the tag's name is in the title, or when a
 
 With no interests synced, every story sits in maybe with a note; nothing is ranked.
 
-### Stretch slice (things you do not know yet)
+### Discover (what you would not have known)
 
-Among tossed stories with no tag match, not blocked and not dismissed: at least 40 points and 25 comments, and a comment-to-point ratio between 0.25 and 2.5 (a higher ratio usually means an argument). Ranked by `log(1 + comments)`, times 1.25 for a site you have never saved and 1.15 for a ratio of 0.6 or more. One pick per `stretchPerKeeps` keeps (4), at least 1, at most `stretchMax` (3). A stretch pick carries its own reasons and score.
+Candidates: not blocked, dismissed or disliked, no direct tag match, not already kept, at least 20 points or 15 comments, and at least two title words of four or more letters.
+
+| Component | Measure | Weight |
+|---|---|---|
+| Novelty | share of title words found in none of your tag terms, opened titles, liked titles or favourites (must be 0.5 or more) | 0.45 |
+| Quality | 0.5 x votes per hour (HN gravity, against twice the page median, capped at 1) + 0.35 x discussion depth (comments to points between 0.3 and 2 scores 1) + 0.15 x submitter karma | 0.30 |
+| New site | a site you have never saved or opened | 0.15 |
+| Emerging | at least two stories in the same near-cluster that none of your tags touch | 0.10 |
+
+The best `discoverCount` (5) become the Discover bucket (`stretch` internally), with the sum as their score.
+
+### Near-clusters
+
+Two stories join when a tag fired on both titles, or they share two or more title words of four or more letters with an overlap of 0.25 or more. A cluster holding a keep lifts its other members by 0.1 ("Same topic as a story you keep"), and they are re-bucketed.
+
+### Likes, dislikes and home-page signals (stories)
+
+| Kind | Label | Points |
+|---|---|---|
+| `like` | Like something you liked (two or more shared title words, overlap 0.3 or more) | 0.15 |
+| `like` | You liked stories from this site (n) | 0.08 x min(1, log2(1 + n) / 3) |
+| `like` | Its tags are ones you liked | 0.05 x min(1, log2(1 + n) / 3) |
+| `dislike` | Like something you disliked | -0.2 |
+| `dislike` | You disliked stories from this site (2 or more) | -0.1 |
+| `karma` | Submitted by a high-karma user (5000 or more) | 0.03 |
+
+A story you liked is kept and one you disliked is tossed, whatever the score. A story you upvoted on HN counts as a like.
 
 ### Comment signals (thread page)
 
@@ -127,6 +153,18 @@ Kept in this browser only, and off in settings if you prefer. `readingLog` holds
 
 The JSONL export has one object per line: for each story shown, `{ schema, id, title, url, domain, points, comments, tags, score, bucket, rules, first_seen, times_seen, opened, opened_story, opened_thread, dismissed }`, then one row for each opened link that was never on a front page. Shown-but-not-opened rows are the negatives a local model needs.
 
+## Likes and dislikes (`hamsa.prefs/1`)
+
+`{ schema, items: { "<hn id>": { v: like | dislike, kind: story | comment, title, domain, tags, at, source: you | hn } } }`, up to 5000 items. A choice you made (`you`) is never replaced by one read from HN (`hn`): stories with HN's "unvote" link, comments with "unvote" (like) or "undown" (dislike).
+
+## Backup and sync (`hamsa.backup/1`)
+
+`{ schema, app_version, exported_at, includes_keys, settings, blocklist, prefs, dismissed, opened, teach: { adj, muted }, providers: [{ name, kind, baseUrl, models, knownModels, apiKey? }], raindropToken?, reading_log?, impressions? }`. Keys appear only when asked for. Restoring merges: likes by item (newest wins, yours beat HN's), blocklist groups by name, dismissals and the reading log joined, providers by name and base URL (a local key is kept), topic boosts and mutes applied to the graph (or held until the next sync builds one). The provider and model chosen in this browser are never carried over.
+
+- **File**: the backup as one JSON file.
+- **Firefox Sync** (`storage.sync`): the backup without keys, reading log or impressions, cut into 7 KB items under `hamsa:0..n` with `hamsa:meta`; the oldest likes, opened titles and dismissals are trimmed until it fits 90 KB. Pushed 8 seconds after a change, pulled at start-up and whenever Firefox Sync brings a newer copy.
+- **GitHub**: `hamsa-backup.json` in a secret gist, through the GitHub API with your token (gist scope); pushed by hand or after changes, pulled by hand.
+
 ## Storage keys
 
-`settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, provider choice), `providers`, `graph`, `profile`, `blocklist`, `dismissed`, `importedItems`, `raindropToken`, `cache` (summaries, 60 newest), `usage` (per model), `usageDaily` (per day, 60 days), `digest`, `karma` (user to karma and time), `readingLog`, `opened`, `impressions`, `errors` (the last 30 problems).
+`settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, provider choice), `providers`, `graph`, `profile`, `blocklist`, `dismissed`, `importedItems`, `raindropToken`, `cache` (summaries, 60 newest), `usage` (per model), `usageDaily` (per day, 60 days), `digest`, `karma` (user to karma and time), `readingLog`, `opened`, `impressions`, `errors` (the last 30 problems), `prefs`, `syncInfo`, `gist` (token, gist id; never synced), `pendingTeach`.

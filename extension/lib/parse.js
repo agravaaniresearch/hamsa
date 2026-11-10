@@ -108,6 +108,8 @@ export function parseThread(doc, userCfg = {}) {
       depth,
       author: comhead?.querySelector('a[href^="user?id="]')?.textContent || null,
       downvotes: DOWNVOTE_MAP[shade] ?? 0,
+      // Your own vote, when you are logged in: HN shows "unvote" after an upvote and "undown" after a downvote.
+      my_vote: /undown/i.test(row.querySelector(`#un_${id}`)?.textContent || '') ? 'down' : /unvote/i.test(row.querySelector(`#un_${id}`)?.textContent || '') ? 'up' : null,
       subtree_size: Number(row.querySelector('a.togg')?.getAttribute('n')) || 1,
       status,
       text: body.text,
