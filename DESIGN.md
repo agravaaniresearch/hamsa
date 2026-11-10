@@ -19,6 +19,10 @@ Hamsa is the swan said to separate milk from water (nira-kshira-viveka). It sepa
 | Summary | One call with your key on the comments that passed; tokens sent and received, and the cost, shown on the card and added to today's total in the header | on request |
 | Digest | Once a day: the front pages scored and grouped into topics, keep and stretch first | none |
 
+## Reading a thread
+
+The default is to scroll through what survives: keep, stretch and maybe comments in one column, best first, each reply saying what it answers, and each rebuttal sitting directly under the comment it answers. Every comment folds to a line; j and k move, c collapses. The tree view is there to see the thread in place, with folds that say what was hidden and why, or with the tossed folds collapsed away.
+
 ## Buckets
 
 - **Keep**: score at or above the keep line.
@@ -35,14 +39,19 @@ Raindrop (tags, highlights), browser bookmarks (folders as tags), HN favourites 
 
 An open JSON file anyone can edit, share and import. Groups switch on and off as a whole. Rules can be written by hand, drafted by the model from a plain description, or suggested from what you dismiss; drafted and suggested rules stay off until you approve them, and a test button shows what each group would have blocked on today's front page.
 
+## Learning from what you open
+
+Opening a story, a thread or a link is the cheapest honest signal there is. Hamsa remembers it in the browser, uses it straight away (sites you open, titles like ones you opened, tags you click), and exports it with everything you were shown as one JSON line per story, so a small local model can later be tuned on your own choices.
+
 ## Interface
 
-One extension owns both the reading layout and the filtering (replacing Modern for Hacker News and the earlier sidebar), so selectors stay stable. The header keeps HN's navigation and adds today's token total, the digest, the theme button (Auto, Light, Dark, as in Parshva), the original HN view and settings. The palette is warm paper and rust, with no blue.
+One extension owns both the reading layout and the filtering (replacing Modern for Hacker News and the earlier sidebar), so selectors stay stable. The header keeps HN's navigation and adds today's token total, the digest, the theme button (Auto, Light, Dark, as in Parshva), the original HN view and settings. The palette is warm paper and rust, with no blue; dark comes in warm charcoal, neutral grey and black. Five bundled fonts, text size, width, justified text and density follow Modern for Hacker News, and a skin themes the HN pages Hamsa does not redraw.
 
 ## Open questions
 
 - The ceiling of the 0 to 1 scale and the keep and maybe lines are starting values. They need tuning on real threads with real interests.
 - Rebuttal detection is keyword-based and will miss polite disagreement.
+- Karma and HN position stand in for comment votes, which HN does not publish.
 - HN favourites and upvotes are read from HN pages, which can change without notice.
 
 See SCHEMA.md for every rule, weight and file format.

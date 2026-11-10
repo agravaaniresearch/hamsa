@@ -7,7 +7,9 @@ import { SUMMARY_SCHEMA, SYSTEM_PROMPT, buildUserMessage, interestsText, normali
 import { completeJSON, testKey, listModels, keySig, originPattern, estimateTokens, isUsable } from "./lib/providers.js";
 import { estimateCost } from "./lib/pricing.js";
 import { fetchAllItems, saveBookmark } from "./lib/raindrop.js";
-import { parseFront, mergeFront } from "./lib/front.js";
+import { parseFront, mergeFront, groupDuplicates } from "./lib/front.js";
+import { tokenize } from "./lib/tokenize.js";
+import { domainOf } from "./lib/profile.js";
 import { scoreStories, RULES_VERSION } from "./lib/score.js";
 import { compileBlocklist, normaliseBlocklist, testBlocklist, suggestFromDismissals, DRAFT_PROMPT, DRAFT_SCHEMA } from "./lib/blocklist.js";
 import { buildProfile, bookmarkTreeToItems, parseHnList } from "./lib/profile.js";
@@ -19,7 +21,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const prepared = new Map(); // thread id -> { thread, prep }
 let lastFront = null;        // the most recent merged front page, for testing the blocklist
 
-const graphOf = (state) => (state.graph ? new TagGraph(state.graph) : null);
+// The tag graph is read from storage once and kept compiled in memory until it changes.
+let graphMemo = null;
+async function loadGraph() {
+  if (graphMemo) return graphMemo.g;
+  const { graph } = await api.storage.local.get("graph");
+  graphMemo = { g: graph ? new TagGraph(graph) : null };
+  return graphMemo.g;
+}
+api.storage.onChanged.addListener((ch) => { if (ch.graph) { graphMemo = null; prepared.clear(); } });
 async function saveGraph(g) { await save({ graph: g.toJSON() }); }
 
 function activeProvider(state, providerId, model) {
@@ -32,13 +42,78 @@ function activeProvider(state, providerId, model) {
 }
 
 // ---- front page ----
-function scoreFront(state, stories) {
-  const graph = graphOf(state);
+async function scoreFront(state, stories) {
+  const graph = await loadGraph();
+  const { opened = null } = await api.storage.local.get("opened");
   const v = scoreStories(stories, {
     graph, profile: state.profile, blocks: compileBlocklist(state.blocklist),
-    scoring: state.settings.scoring, dismissed: state.dismissed.map((d) => d.id),
+    scoring: state.settings.scoring, dismissed: state.dismissed.map((d) => d.id), opened,
   });
+  // Duplicate submissions: the best-voted one leads, takes the best bucket and score of the group.
+  const byId = new Map(v.map((x) => [x.id, x]));
+  const RANK = { keep: 0, stretch: 1, maybe: 2, toss: 3 };
+  for (const g of groupDuplicates(stories)) {
+    const lead = byId.get(g[0]);
+    const all = g.map((id) => byId.get(id));
+    const best = all.slice().sort((a, b) => RANK[a.bucket] - RANK[b.bucket] || b.score - a.score)[0];
+    if (best !== lead && !lead.dismissed && !lead.blocked) { lead.bucket = best.bucket; lead.score = best.score; lead.total = best.total; lead.reasons = best.reasons; lead.tags = best.tags; }
+    lead.dups = g.slice(1);
+    for (const x of all.slice(1)) x.dupOf = lead.id;
+  }
   return { verdicts: v, ready: !!(graph?.size || state.profile) };
+}
+
+// ---- reading log: what you open, kept in this browser ----
+const emptyOpened = () => ({ domains: {}, titles: [], tags: {} });
+async function doOpened({ entry }) {
+  const { settings = {} } = await api.storage.local.get("settings");
+  if (settings.readingLog === false || !entry) return { ok: true, logged: false };
+  const { readingLog = [], opened = emptyOpened() } = await api.storage.local.get(["readingLog", "opened"]);
+  const e = { at: Date.now(), kind: entry.kind, id: entry.id || null, title: String(entry.title || "").slice(0, 300), url: entry.url || null, domain: entry.domain || (entry.url ? domainOf(entry.url) : null), tags: (entry.tags || []).slice(0, 6), score: entry.score ?? null, bucket: entry.bucket || null, rules: RULES_VERSION, page: entry.page || null, background: !!entry.background };
+  readingLog.unshift(e);
+  if (e.domain && e.kind !== "thread") opened.domains[e.domain] = (opened.domains[e.domain] || 0) + 1;
+  for (const t of e.tags) opened.tags[t] = (opened.tags[t] || 0) + 1;
+  if (e.title && (e.kind === "story" || e.kind === "thread") && !opened.titles.some((x) => x.id === e.id)) {
+    opened.titles.unshift({ id: e.id, title: e.title, terms: [...new Set(tokenize(e.title))] });
+    opened.titles = opened.titles.slice(0, 400);
+  }
+  await save({ readingLog: readingLog.slice(0, 5000), opened });
+  return { ok: true, logged: true };
+}
+
+async function doOpenTab({ url, active, entry }) {
+  if (!/^https?:/i.test(url || "")) throw new Error("Only web links can be opened.");
+  await api.tabs.create({ url, active: !!active });
+  if (entry) await doOpened({ entry: { ...entry, background: !active } });
+  return { ok: true };
+}
+
+// Stories you were shown, so the export has negatives as well as what you opened.
+async function recordImpressions(stories, verdicts) {
+  const { impressions = {} } = await api.storage.local.get("impressions");
+  const now = Date.now();
+  stories.forEach((st, i) => {
+    const v = verdicts[i];
+    const prev = impressions[st.id];
+    impressions[st.id] = { id: st.id, title: st.title, url: st.url, domain: st.domain, points: st.points, comments: st.comments, tags: v.tags, score: v.score, bucket: v.bucket, rules: RULES_VERSION, first: prev?.first || now, last: now, seen: (prev?.seen || 0) + 1 };
+  });
+  const keep = Object.values(impressions).sort((a, b) => b.last - a.last).slice(0, 3000);
+  await save({ impressions: Object.fromEntries(keep.map((x) => [x.id, x])) });
+}
+
+// One JSON object per line: every story you were shown or opened, with what Hamsa scored and what you did.
+async function doExportLog() {
+  const { impressions = {}, readingLog = [], dismissed = [] } = await api.storage.local.get(["impressions", "readingLog", "dismissed"]);
+  const opens = new Map();
+  for (const e of readingLog) if (e.id) { const o = opens.get(e.id) || []; o.push(e); opens.set(e.id, o); }
+  const gone = new Set(dismissed.map((d) => d.id));
+  const rows = Object.values(impressions).map((x) => {
+    const o = opens.get(x.id) || [];
+    return { schema: "hamsa.reading/1", id: x.id, title: x.title, url: x.url, domain: x.domain, points: x.points, comments: x.comments, tags: x.tags, score: x.score, bucket: x.bucket, rules: x.rules, first_seen: new Date(x.first).toISOString(), times_seen: x.seen, opened: o.length > 0, opened_story: o.some((e) => e.kind === "story"), opened_thread: o.some((e) => e.kind === "thread"), dismissed: gone.has(x.id) };
+  });
+  const seen = new Set(rows.map((r) => r.id));
+  for (const e of readingLog) if (!e.id || !seen.has(e.id)) rows.push({ schema: "hamsa.reading/1", kind: e.kind, id: e.id, title: e.title, url: e.url, domain: e.domain, tags: e.tags, score: e.score, bucket: e.bucket, rules: e.rules, opened: true, opened_at: new Date(e.at).toISOString(), page: e.page });
+  return { jsonl: rows.map((r) => JSON.stringify(r)).join("\n"), rows: rows.length, opens: readingLog.length };
 }
 
 async function doFront({ pages }) {
@@ -46,10 +121,11 @@ async function doFront({ pages }) {
   const merged = mergeFront(pages.map((h) => parseFront(parseDoc(h))));
   if (merged.me && merged.me !== state.settings.hnUser) await patchSettings({ hnUser: merged.me });
   lastFront = { stories: merged.stories, at: Date.now() };
-  const { verdicts, ready } = scoreFront(state, merged.stories);
+  const { verdicts, ready } = await scoreFront(state, merged.stories);
+  if (state.settings.readingLog !== false) recordImpressions(merged.stories, verdicts).catch(() => {});
   const counts = { keep: 0, maybe: 0, stretch: 0, toss: 0 };
   for (const x of verdicts) counts[x.bucket]++;
-  const graph = graphOf(state);
+  const graph = await loadGraph();
   return {
     stories: merged.stories, verdicts, counts, ready, me: merged.me,
     rules: RULES_VERSION, scoring: state.settings.scoring,
@@ -76,17 +152,42 @@ async function doDismiss({ story, undo }) {
   if (!undo) next = [{ id: story.id, title: story.title, domain: story.domain, at: Date.now() }, ...next].slice(0, 500);
   await save({ dismissed: next });
   const state = await getState();
-  const graph = graphOf(state);
+  const graph = await loadGraph();
   return { ok: true, suggestions: suggestFromDismissals(next, state.blocklist, { ownTags: graph ? graph.tagNames() : [] }) };
 }
 
 // ---- thread page ----
+// Author karma from HN's public API, cached for a week. Fetched within a time budget so a page never
+// waits long; whatever is still missing keeps loading and is used next time.
+const KARMA_TTL = 7 * 864e5;
+let karmaMemo = null;
+async function karmaFor(users, budgetMs = 1200) {
+  if (!karmaMemo) karmaMemo = (await api.storage.local.get("karma")).karma || {};
+  const now = Date.now();
+  const want = [...new Set(users.filter(Boolean))].filter((u) => !karmaMemo[u] || now - karmaMemo[u][1] > KARMA_TTL).slice(0, 200);
+  const one = async (u) => {
+    try {
+      const r = await fetch(`https://hacker-news.firebaseio.com/v0/user/${encodeURIComponent(u)}/karma.json`, { credentials: "omit" });
+      if (r.ok) { const k = await r.json(); if (typeof k === "number") karmaMemo[u] = [k, Date.now()]; }
+    } catch { /* offline or blocked: karma is a small signal */ }
+  };
+  const run = (async () => {
+    for (let i = 0; i < want.length; i += 12) await Promise.all(want.slice(i, i + 12).map(one));
+    const keep = Object.entries(karmaMemo).sort((a, b) => b[1][1] - a[1][1]).slice(0, 20000);
+    karmaMemo = Object.fromEntries(keep);
+    await save({ karma: karmaMemo });
+  })();
+  await Promise.race([run, sleep(budgetMs)]);
+  return Object.fromEntries(Object.entries(karmaMemo).map(([u, [k]]) => [u, k]));
+}
+
 async function analyse(id, pages) {
   const state = await getState();
-  const graph = graphOf(state);
+  const graph = await loadGraph();
   const html = pages?.length ? pages : await fetchPages(id, { parseDoc });
   const thread = mergePages(html, parseDoc);
-  const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate });
+  const karma = state.settings.karma === false ? null : await karmaFor(thread.comments.filter((c) => c.status === "ok").map((c) => c.author));
+  const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate, karma });
   prepared.set(id, { thread, prep });
   return { state, graph, thread, prep };
 }
@@ -107,7 +208,7 @@ async function doThread({ id, pages }) {
   const cached = await cacheGet(id);
   return {
     id, title: thread.story.title, domain: thread.story.link_domain, points: thread.story.points, author: thread.story.author,
-    funnel: prep.funnel, dropped: { unavailable: stats.unavailable, ...stats.pruned }, tokens: prep.tokens,
+    funnel: prep.funnel, dropped: { unavailable: stats.unavailable, ...stats.pruned }, tokens: prep.tokens, context: thread.story.context,
     verdicts: commentVerdicts(thread), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
     graphReady: !!graph?.size, estimate, model, rules: RULES_VERSION,
     cached: cached && cached.rules === RULES_VERSION ? cached : null,
@@ -140,7 +241,7 @@ async function doSummarise({ id, providerId, model, force }) {
   const state = await getState();
   const { p, m } = activeProvider(state, providerId, model);
   const entry = prepared.get(id) || (await analyse(id), prepared.get(id));
-  const graph = graphOf(state);
+  const graph = await loadGraph();
   const interests = interestsText(graph, state.settings.extraInterests);
   const user = buildUserMessage(entry.prep.threadText, interests);
   const estimateIn = entry.prep.tokens + estimateTokens(SYSTEM_PROMPT + interests + JSON.stringify(SUMMARY_SCHEMA));
@@ -162,7 +263,7 @@ async function doSummarise({ id, providerId, model, force }) {
 // ---- learning ----
 async function doFeedback(msg) {
   const state = await getState();
-  const g = graphOf(state);
+  const g = await loadGraph();
   if (!g) throw new Error("Sync your interest sources first (Hamsa settings).");
   if (state.settings.learning === "off") return { ok: true, note: "Learning is off." };
   let note = "";
@@ -192,7 +293,7 @@ async function doFeedback(msg) {
 
 async function doSavePoint({ id, title, tags, point }) {
   const state = await getState();
-  const g = graphOf(state);
+  const g = await loadGraph();
   if (state.raindropToken) await saveBookmark(state.raindropToken, { link: `${HN}item?id=${id}`, title: `HN: ${title}`, tags: (tags || []).slice(0, 5), note: point || "" });
   if (g) {
     g.add({ title, excerpt: point || "", tags: tags || [], created: new Date().toISOString() });
@@ -258,7 +359,7 @@ async function doSync() {
       sources.history = { items: history.length, at: Date.now() };
     } else notes.push("Browser history needs permission: switch the source off and on again.");
   }
-  const prev = graphOf(state);
+  const prev = await loadGraph();
   const gstate = buildState(items, { excluded: state.settings.excludedTags });
   if (prev) { gstate.adj = prev.state.adj; gstate.muted = prev.state.muted; } // keep what you taught it
   const profile = buildProfile({ items, favourites, history, sources });
@@ -271,7 +372,7 @@ async function doSync() {
 
 async function doGraphInfo() {
   const state = await getState();
-  const g = graphOf(state);
+  const g = await loadGraph();
   const { graphSyncedAt } = await api.storage.local.get("graphSyncedAt");
   if (!g) return { ready: false, sources: sourceStatus(state, null) };
   return { ready: true, tags: g.size, items: g.state.n_items, syncedAt: graphSyncedAt || null, top: g.topTags(40).map((t) => ({ ...t, muted: g.isMuted(t.tag), adj: g.adj(t.tag) })), muted: g.state.muted, sources: sourceStatus(state, g), domains: Object.keys(state.profile?.domains || {}).length, favourites: state.profile?.fav?.length || 0 };
@@ -324,7 +425,7 @@ async function buildDigest() {
   const want = Math.max(1, Math.min(6, state.settings.scoring.pages || 4));
   lastFront = null;
   const stories = await frontStories(want);
-  const { verdicts, ready } = scoreFront(state, stories);
+  const { verdicts, ready } = await scoreFront(state, stories);
   const clusters = clusterStories(stories, verdicts).map((c) => ({
     ...c, items: c.items.map(({ story, verdict }) => ({ story: { id: story.id, title: story.title, url: story.url, domain: story.domain, points: story.points, comments: story.comments }, verdict: { score: verdict.score, bucket: verdict.bucket, reasons: verdict.reasons.slice(0, 4), tags: verdict.tags } })),
   }));
@@ -362,7 +463,8 @@ async function doUiState() {
   let model = null;
   try { const { p, m } = activeProvider(state); if (isUsable(p)) model = { provider: p.name, model: m, providerId: p.id }; } catch { /* none */ }
   const models = state.providers.filter(isUsable).flatMap((p) => (p.models || []).map((m) => ({ providerId: p.id, provider: p.name, model: m })));
-  return { theme: s.theme, font: s.font, layer: s.layer, order: s.order, scoring: s.scoring, hnUser: s.hnUser, usage: await todayUsage(), model, models, learning: s.learning, fx: s.fx };
+  const pick = ["theme", "font", "titleFont", "textSize", "width", "justify", "density", "darkStyle", "skin", "layer", "order", "scoring", "hnUser", "learning", "fx", "linkTarget", "threadView", "threadSort", "collapseTossed", "readingLog"];
+  return { ...Object.fromEntries(pick.map((k) => [k, s[k]])), usage: await todayUsage(), model, models };
 }
 
 const handlers = {
@@ -380,13 +482,17 @@ const handlers = {
   digest: doDigest,
   suggestions: async () => {
     const state = await getState();
-    const g = graphOf(state);
+    const g = await loadGraph();
     return { suggestions: suggestFromDismissals(state.dismissed, state.blocklist, { ownTags: g ? g.tagNames() : [] }) };
   },
   "test-key": doTestKey,
   "ui-state": doUiState,
+  opened: doOpened,
+  "open-tab": doOpenTab,
+  "export-log": doExportLog,
+  "log-clear": async () => { await save({ readingLog: [], opened: emptyOpened(), impressions: {} }); return { ok: true }; },
   "set-ui": async ({ patch }) => {
-    const allowed = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => ["theme", "layer", "order", "active"].includes(k)));
+    const allowed = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => ["theme", "layer", "order", "active", "threadView", "threadSort", "collapseTossed", "linkTarget"].includes(k)));
     await patchSettings(allowed);
     return { ok: true };
   },
@@ -394,10 +500,23 @@ const handlers = {
   "open-digest": async () => { await api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }); return { ok: true }; },
 };
 
+// A short log of what went wrong, shown in settings under Recent problems.
+async function logError(where, message) {
+  try {
+    const { errors = [] } = await api.storage.local.get("errors");
+    await save({ errors: [{ at: Date.now(), where, message: String(message).slice(0, 400), version: api.runtime.getManifest().version }, ...errors].slice(0, 30) });
+  } catch { /* storage unavailable */ }
+}
+handlers["log-error"] = async ({ where, message }) => { await logError(where, message); return { ok: true }; };
+handlers["errors-clear"] = async () => { await save({ errors: [] }); return { ok: true }; };
+
 api.runtime.onMessage.addListener((msg) => {
   const h = handlers[msg?.type];
   if (!h) return undefined;
-  return h(msg).catch((e) => ({ error: e?.message || String(e) }));
+  return h(msg).catch((e) => {
+    logError(msg.type, e?.message || e);
+    return { error: e?.message || String(e) };
+  });
 });
 
 // The toolbar button opens the digest.

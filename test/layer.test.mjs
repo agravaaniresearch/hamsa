@@ -106,3 +106,48 @@ test("every comment gets a verdict; rebuttals are protected; removed ones keep t
   const f = prep.funnel;
   assert.ok(f.comments >= f.afterCrust && f.afterCrust >= f.afterTags && f.afterTags >= f.sent);
 });
+
+import { normUrl, groupDuplicates } from "../extension/lib/front.js";
+import { gravity, scoreComment } from "../extension/lib/score.js";
+import { prune } from "../extension/lib/prune.js";
+
+test("duplicate submissions group by normalised link or near-identical title", () => {
+  assert.equal(normUrl("https://www.example.com/post/?utm_source=x"), normUrl("http://example.com/post"));
+  assert.equal(normUrl("https://arxiv.org/pdf/2401.01234v2"), normUrl("https://arxiv.org/abs/2401.01234"));
+  const g = groupDuplicates([
+    { id: 1, title: "A", url: "https://example.com/a", external: true, points: 10 },
+    { id: 2, title: "B", url: "https://www.example.com/a/", external: true, points: 50 },
+    { id: 3, title: "Rust compiler gets faster incremental builds", url: "https://x.org/1", external: true, points: 5 },
+    { id: 4, title: "The Rust compiler gets faster incremental builds", url: "https://y.org/2", external: true, points: 9 },
+    { id: 5, title: "Unrelated", url: "https://z.org", external: true, points: 1 },
+  ]);
+  assert.deepEqual(g.map((x) => x.slice().sort()), [[1, 2], [3, 4]]);
+  assert.equal(g[0][0], 2); // the best-voted submission leads
+});
+
+test("HN gravity decays with age", () => {
+  const now = Date.parse("2026-11-10T12:00:00Z");
+  assert.ok(gravity(100, "2026-11-10T11:00:00", now) > gravity(100, "2026-11-09T12:00:00", now));
+});
+
+test("comments gain context, inheritance, karma and reply signals", () => {
+  const v = scoreComment({ text: "x", tokens: new Set(["glioma"]), evidence: {}, score: 500, author: "a", subtree_size: 9 },
+    { hasGraph: true, story: { tags: ["oncology"], score: 0.8, terms: new Set(["glioma"]) }, parentTagPoints: 0.3, karma: { a: 25000 } });
+  const kinds = v.reasons.map((r) => r.kind);
+  for (const k of ["context", "inherit", "karma", "replies"]) assert.ok(kinds.includes(k), k);
+  assert.notEqual(v.bucket, "toss");
+  assert.ok(v.quality > 0 && v.quality <= 1);
+});
+
+test("near-duplicate comments fold under the better-ranked one, and a thread keeps a minimum of survivors", () => {
+  const mk = (id, text, parent = null, author = `u${id}`) => ({ id, path: String(id), parent_path: parent, depth: parent ? 1 : 0, author, downvotes: 0, subtree_size: 1, status: "ok", text, links: [], has_code: false });
+  const same = "the scheduler starves long running jobs because the priority queue never ages entries so starvation happens under load";
+  const thread = { story: { author: "op", title: "A scheduler story" }, comments: [mk(1, same), mk(2, same + " indeed"), ...Array.from({ length: 30 }, (_, i) => mk(10 + i, Array.from({ length: 22 }, (_, k) => `w${(i * 37 + k * 11) % 997}z`).join(" ")))] };
+  const graph = new TagGraph(buildState(bm, { params: { minTagCount: 1, minTermDocs: 1 } }));
+  const r = prune(thread, { minSurvivors: 10 }, graph);
+  const two = thread.comments.find((c) => c.id === 2);
+  assert.equal(two.dropped, "duplicate");
+  assert.ok(thread.comments.find((c) => c.id === 1).dups.includes(2));
+  assert.ok(r.kept.length >= 10, `kept ${r.kept.length}`);
+  assert.ok(thread.comments.some((c) => c.verdict.reasons.some((x) => x.kind === "floor")));
+});

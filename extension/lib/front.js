@@ -1,5 +1,6 @@
 // Parses HN listing pages (front page, newest, ask, show, best) into plain story records.
 // Works on any DOM: linkedom in tests, DOMParser in the background page.
+import { tokenize } from "./tokenize.js";
 
 const num = (s) => parseInt(String(s || "").replace(/[^\d]/g, ""), 10) || 0;
 
@@ -54,4 +55,54 @@ export function mergeFront(pages) {
     }
   }
   return { stories: out, me };
+}
+
+// ---- duplicates ----
+// The same link submitted twice, or near-identical titles, become one card: the best-voted submission
+// leads and lists the others.
+
+export function normUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "news.ycombinator.com") return null; // Ask HN and similar have no shared link
+    const host = u.hostname.replace(/^(www|m|mobile|amp)\./, "");
+    let path = u.pathname.replace(/\/(index\.html?)?$/, "").replace(/\/amp$/, "");
+    if (/arxiv\.org$/.test(host)) path = path.replace(/^\/(pdf|abs)\//, "/abs/").replace(/v\d+$/, "").replace(/\.pdf$/, "");
+    const keep = [...u.searchParams].filter(([k]) => !/^(utm_|ref$|ref_|source$|fbclid|gclid|mc_|s$|share)/i.test(k));
+    if (/youtube\.com$/.test(host)) return `youtube/${u.searchParams.get("v") || path}`;
+    if (host === "youtu.be") return `youtube/${path.slice(1)}`;
+    keep.sort();
+    return `${host}${path}${keep.length ? "?" + keep.map(([k, v]) => `${k}=${v}`).join("&") : ""}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+export function groupDuplicates(stories) {
+  const n = stories.length;
+  const parent = [...Array(n).keys()];
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const byUrl = new Map();
+  const terms = stories.map((s) => new Set(tokenize(s.title)));
+  stories.forEach((s, i) => {
+    const k = s.external ? normUrl(s.url) : null;
+    if (!k) return;
+    if (byUrl.has(k)) parent[find(i)] = find(byUrl.get(k)); else byUrl.set(k, i);
+  });
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      let shared = 0;
+      for (const t of terms[i]) if (terms[j].has(t)) shared++;
+      if (shared >= 3 && shared / (terms[i].size + terms[j].size - shared) >= 0.6) parent[find(j)] = find(i);
+    }
+  }
+  const groups = new Map();
+  for (let i = 0; i < n; i++) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => (stories[b].points || 0) - (stories[a].points || 0));
+    out.push(g.map((i) => stories[i].id));
+  }
+  return out; // [[leadId, otherId, ...], ...]
 }

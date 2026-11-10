@@ -58,7 +58,7 @@ export function prepare(thread, graph, cfg = {}) {
 // 689 in -> after crust -> after tag match -> sent. The crust is everything except the interest floor and the budget.
 export function funnel(stats) {
   const p = stats.pruned;
-  const crust = stats.unavailable + p.downvoted + p.abusive + p.flame_chain + p.meta + p.quote_only + p.short;
+  const crust = stats.unavailable + p.downvoted + p.abusive + p.flame_chain + p.meta + p.quote_only + p.short + (p.duplicate || 0);
   const afterCrust = stats.rows_seen - crust;
   const afterTags = afterCrust - p.below_floor;
   return { comments: stats.rows_seen, afterCrust, afterTags, sent: stats.kept };
@@ -73,6 +73,7 @@ export function verdicts(thread) {
       path: c.path, depth: c.depth, author: c.author, score: v.score ?? 0, total: v.total ?? 0,
       bucket: v.bucket || "removed", rule: v.rule || null, reasons: v.reasons || [], rules: v.rules,
       rebuttal: !!v.rebuttal, answered: !!v.answered, sent: !!v.sent, stretch: !!c.stretch,
+      quality: v.quality ?? 0, parent: c.parent_path || null, dupOf: v.dupOf || null, dups: v.dups || [],
       tags: (v.reasons || []).filter((r) => r.kind === "tag").map((r) => r.tag),
     };
   }

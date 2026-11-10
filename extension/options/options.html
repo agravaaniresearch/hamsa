@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hamsa settings</title>
   <script src="../shared/theme-init.js"></script>
+  <link rel="stylesheet" href="../fonts/fonts.css">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="options.css">
 </head>
@@ -33,8 +34,41 @@
         <select id="layer"><option value="on">On: filtered pages</option><option value="off">Off: plain HN</option></select></label>
       <label class="field"><span>Front page order</span>
         <select id="order"><option value="hamsa">Hamsa: keep, stretch, maybe</option><option value="hn">HN's own order</option></select></label>
+    </div>
+
+    <h2>Reading</h2>
+    <p class="lede">Hamsa owns the whole reading layout on Hacker News, in the spirit of Modern for Hacker News. Fonts are bundled, so they work offline.</p>
+    <div class="grid">
+      <label class="field"><span>Text font</span>
+        <select id="font"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata (serif, for long reading)</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
       <label class="field"><span>Title font</span>
-        <select id="font"><option value="system">System</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+        <select id="titleFont"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
+      <label class="field"><span>Text size</span>
+        <select id="textSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option><option value="xl">Extra large</option></select></label>
+      <label class="field"><span>Page width</span>
+        <select id="width"><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide</option></select></label>
+      <label class="field"><span>Comment text</span>
+        <select id="justify"><option value="off">Ragged right</option><option value="on">Justified</option></select></label>
+      <label class="field"><span>Density</span>
+        <select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+      <label class="field"><span>Dark style</span>
+        <select id="darkStyle"><option value="warm">Warm charcoal</option><option value="neutral">Neutral grey</option><option value="black">Black (OLED)</option></select></label>
+      <label class="field"><span>Other HN pages</span>
+        <select id="skin"><option value="on">Themed to match</option><option value="off">Plain HN</option></select></label>
+      <label class="field"><span>Story links open in</span>
+        <select id="linkTarget"><option value="same">This tab</option><option value="new">A new tab</option><option value="background">A background tab</option></select></label>
+    </div>
+    <div id="font-sample" class="sample">The quick brown fox: a sample of the text and title fonts you picked.</div>
+
+    <h2>Reading log</h2>
+    <p class="lede">Hamsa remembers the stories, threads and links you open, and the stories it showed you, in this browser only. What you open becomes a signal (sites, title words and tags you click), and the export is a ready-made dataset for tuning a local model on your own choices.</p>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="readingLog"><span></span></label><span>Remember what I open</span>
+      <span id="log-count" class="status"></span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="log-export" class="secondary" type="button">Download reading log (JSONL)</button>
+      <button id="log-clear" class="secondary" type="button">Clear the log</button>
     </div>
 
     <h2>Interest sources</h2>
@@ -122,6 +156,7 @@
       <label class="field"><span>Most stretch picks per page</span><input id="sc-stretchMax" type="number" min="0" max="10" step="1"></label>
       <label class="field"><span>Front pages to merge</span><input id="sc-pages" type="number" min="1" max="6" step="1"></label>
       <label class="field"><span>Comments below the floor</span><select id="gate"><option value="on">Shown, not sent to the model</option><option value="off">Sent to the model too</option></select></label>
+      <label class="field"><span>Author karma</span><select id="karma"><option value="on">Read from HN's public API (cached a week)</option><option value="off">Do not use</option></select></label>
     </div>
     <div class="row"><button id="sc-reset" class="secondary" type="button">Reset to starting values</button></div>
 
@@ -144,6 +179,11 @@
 
     <h2>Usage</h2>
     <div id="usage" class="tablewrap"></div>
+
+    <h2>Recent problems</h2>
+    <p class="lede">Anything that went wrong on Hacker News, in the digest or here, newest first. Copy it into a bug report if something keeps failing.</p>
+    <div id="errors"></div>
+    <div class="row"><button id="err-copy" class="secondary" type="button">Copy</button><button id="err-clear" class="secondary" type="button">Clear</button></div>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
   <script type="module" src="options.js"></script>

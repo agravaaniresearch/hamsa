@@ -54,8 +54,50 @@ function initAppearance() {
   $("layer").addEventListener("change", async (e) => { await patchSettings({ layer: e.target.value === "on" }); notify("ok", e.target.value === "on" ? "Hamsa is on for Hacker News" : "Hamsa is off: HN shows as normal"); });
   $("order").value = s.order || "hamsa";
   $("order").addEventListener("change", (e) => patchSettings({ order: e.target.value }));
-  $("font").value = s.font || "system";
-  $("font").addEventListener("change", async (e) => { await patchSettings({ font: e.target.value }); state.settings.font = e.target.value; applyTheme(state.settings.theme, e.target.value); });
+}
+
+// ---- reading ----
+const FAMILY = { system: "system-ui, sans-serif", inter: '"Hamsa Inter", sans-serif', literata: '"Hamsa Literata", serif', "source-serif": '"Hamsa Source Serif", serif', atkinson: '"Hamsa Atkinson", sans-serif', "plex-mono": '"Hamsa Plex Mono", monospace' };
+const BOOL = new Set(["justify", "skin", "karma"]);
+function initReading() {
+  const s = state.settings;
+  const sample = () => {
+    const el = $("font-sample");
+    el.replaceChildren(h("strong", { style: `font-family:${FAMILY[$("titleFont").value]};font-size:17px;display:block;margin-bottom:4px` }, "Why small language models fail quietly on rare clinical terms"),
+      h("span", { style: `font-family:${FAMILY[$("font").value]}` }, "Recall dropped on gene symbol aliases, so we added an alias table before ranking and the gap closed. This is the text font at your chosen size."));
+    el.style.textAlign = $("justify").value === "on" ? "justify" : "left";
+  };
+  for (const key of ["font", "titleFont", "textSize", "width", "justify", "density", "darkStyle", "skin", "linkTarget", "karma"]) {
+    const el = $(key);
+    el.value = BOOL.has(key) ? (s[key] === false || (key === "justify" && !s[key]) ? "off" : "on") : s[key];
+    el.addEventListener("change", async () => {
+      await patchSettings({ [key]: BOOL.has(key) ? el.value === "on" : el.value });
+      state.settings[key] = BOOL.has(key) ? el.value === "on" : el.value;
+      sample();
+      notify("ok", "Saved", "Open HN tabs update straight away.");
+    });
+  }
+  sample();
+}
+
+async function initReadingLog() {
+  const box = $("readingLog");
+  box.checked = state.settings.readingLog !== false;
+  box.addEventListener("change", async () => { await patchSettings({ readingLog: box.checked }); notify("ok", box.checked ? "Hamsa will remember what you open" : "Reading log paused", box.checked ? "It stays in this browser." : "Nothing new is recorded; what is there stays until you clear it."); });
+  const count = async () => {
+    const { readingLog = [], impressions = {} } = await api.storage.local.get(["readingLog", "impressions"]);
+    $("log-count").textContent = `${readingLog.length.toLocaleString()} opened, ${Object.keys(impressions).length.toLocaleString()} stories seen.`;
+  };
+  await count();
+  $("log-export").addEventListener("click", async () => {
+    const r = await send({ type: "export-log" });
+    const blob = new Blob([r.jsonl + "\n"], { type: "application/x-ndjson" });
+    const a = h("a", { href: URL.createObjectURL(blob), download: `hamsa-reading-${new Date().toISOString().slice(0, 10)}.jsonl` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    notify("ok", `Exported ${r.rows.toLocaleString()} rows`, "One JSON object per line: what Hamsa scored, and what you opened or dismissed.");
+  });
+  $("log-clear").addEventListener("click", async () => { await send({ type: "log-clear" }); await count(); notify("ok", "Reading log cleared"); });
 }
 
 async function checkPermission() {
@@ -337,10 +379,21 @@ function renderUsage() {
     days.length ? table(["Day", "Runs", "Tokens in", "Tokens out", "Cost (USD)"], days.map(([d, u]) => h("tr", {}, h("td", {}, d), h("td", {}, String(u.runs)), h("td", {}, u.input.toLocaleString()), h("td", {}, u.output.toLocaleString()), h("td", {}, u.usd ? u.usd.toFixed(4) : "0")))) : null].filter(Boolean));
 }
 
+async function renderErrors() {
+  const { errors = [] } = await api.storage.local.get("errors");
+  $("errors").replaceChildren(errors.length
+    ? h("ul", { class: "hits" }, errors.map((e) => h("li", {}, `${new Date(e.at).toLocaleString()} · ${e.where} · v${e.version || "?"}: ${e.message}`)))
+    : h("p", { class: "status" }, "None."));
+  $("err-copy").onclick = async () => { await navigator.clipboard.writeText(errors.map((e) => `${new Date(e.at).toISOString()} ${e.where} v${e.version}: ${e.message}`).join("\n") || "None"); notify("ok", "Copied"); };
+  $("err-clear").onclick = async () => { await send({ type: "errors-clear" }); renderErrors(); };
+}
+
 async function init() {
   state = await getState();
   applyTheme(state.settings.theme, state.settings.font);
   initAppearance();
+  initReading();
+  await initReadingLog();
   await checkPermission();
   await initSources();
   await initBlocklist();
@@ -350,6 +403,7 @@ async function init() {
   renderProviders();
   initSummary();
   renderUsage();
+  await renderErrors();
   await refreshGraph();
 }
 init();

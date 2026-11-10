@@ -5,7 +5,7 @@
   const { h } = H;
   if (!document.getElementById("hnmain")) return H.release();
   let ui;
-  try { ui = await H.send({ type: "ui-state" }); } catch { return H.release(); }
+  try { ui = await H.send({ type: "ui-state" }); } catch (e) { return H.fail(e.message, "ui-state"); }
   if (!ui.layer) return H.release();
   H.applyTheme(ui.theme, ui.font);
 
@@ -28,7 +28,7 @@
     status.lastChild.textContent = "Scoring…";
     data = await H.send({ type: "front", pages: [first, ...more] });
   } catch (e) {
-    status.replaceWith(h("div", { class: "h-err" }, `Hamsa could not read this page: ${e.message}`), h("button", { class: "h-btn", onclick: H.showOriginal || (() => H.release()) }, "Show plain HN"));
+    return H.fail(e.message, "front");
     return;
   }
   const pagesRead = Math.max(1, new Set(data.stories.map((s) => Math.ceil((s.rank || 1) / 30))).size);
@@ -36,7 +36,7 @@
   const show = { keep: true, stretch: true, maybe: true, toss: false };
   let order = ui.order || "hamsa";
   const byId = new Map(data.stories.map((s, i) => [s.id, { s, v: data.verdicts[i] }]));
-  const list = h("div", { class: "h-list", style: "display:flex;flex-direction:column;gap:12px" });
+  const list = h("div", { class: "h-list", style: "display:flex;flex-direction:column;gap:var(--h-gap)" });
 
   // ---- one story ----
   function storyCard({ s, v }) {
@@ -62,13 +62,21 @@
       H.toast(undo ? "Restored" : "Moved to toss. It stays logged and can be restored.");
       draw();
     });
-    const comments = s.kind === "job" ? null : h("a", { href: `item?id=${s.id}` }, s.comments ? `${s.comments} comments` : "discuss");
+    const entry = (kind) => ({ kind, id: s.id, title: s.title, url: kind === "thread" ? `https://news.ycombinator.com/item?id=${s.id}` : s.url, domain: s.domain, tags: v.tags, score: v.score, bucket: v.bucket, page: "front" });
+    const threadUrl = `https://news.ycombinator.com/item?id=${s.id}`;
+    const comments = s.kind === "job" ? null : H.track(h("a", { href: `item?id=${s.id}` }, s.comments ? `${s.comments} comments` : "discuss"), entry("thread"), ui);
+    const titleA = H.track(h("a", { class: "h-stitle", href: s.url, rel: s.external ? "noopener noreferrer" : null }, s.title), entry("story"), ui);
+    const bgStory = h("button", { class: "h-ibtn", type: "button", title: "Open the story in a background tab", "aria-label": "Open the story in a background tab", onclick: () => H.openTab(s.url, false, entry("story")) }, H.icon("bg", 16));
+    const bgThread = s.kind === "job" ? null : h("button", { class: "h-btn", type: "button", title: "Open the filtered thread in a background tab", onclick: () => H.openTab(threadUrl, false, entry("thread")) }, "Thread in background");
+    const dups = (v.dups || []).map((id) => byId.get(id)).filter(Boolean);
+    const also = dups.length ? h("div", { class: "h-also" }, h("span", {}, `Also submitted ${dups.length === 1 ? "once more" : `${dups.length} more times`}:`),
+      dups.map(({ s: d }) => h("span", {}, H.track(h("a", { href: `item?id=${d.id}` }, d.title), { kind: "thread", id: d.id, title: d.title, url: `https://news.ycombinator.com/item?id=${d.id}`, domain: d.domain, page: "front" }, ui), ` · ${d.points} points · ${d.comments} comments${d.domain && d.domain !== s.domain ? ` · ${d.domain}` : ""}`))) : null;
     return h("article", { class: `h-card${v.bucket === "toss" ? " h-dim" : ""}${v.bucket === "stretch" ? " h-stretch-card" : ""}`, id: `hamsa-s-${s.id}` },
       h("div", { class: "h-story" },
         h("div", { class: "h-rank", title: "Rank on Hacker News" }, s.rank ? String(s.rank) : ""),
         h("div", { class: "h-sbody" },
           h("div", { class: "h-shead" },
-            h("a", { class: "h-stitle", href: s.url, rel: s.external ? "noopener noreferrer" : null }, s.title),
+            titleA,
             H.badge(v.bucket)),
           h("div", { class: "h-meta" },
             vote,
@@ -83,17 +91,19 @@
             v.blocked ? h("span", { class: "h-flag plain" }, `blocked: ${v.blocked.group}`) : null,
             v.bucket === "stretch" ? h("span", { class: "h-flag stretch" }, "outside your tags") : null,
             more > 0 ? h("span", { class: "h-note" }, `+${more} more signal${more > 1 ? "s" : ""}`) : null),
+          also,
           why,
-          h("div", { class: "h-row" }, whyBtn, comments ? h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread") : null, dismiss))));
+          h("div", { class: "h-row" }, whyBtn, comments ? H.track(h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread"), entry("thread"), ui) : null, bgThread, s.external ? bgStory : null, dismiss))));
   }
 
   // ---- list, chips and panels ----
   const RANK = { keep: 0, stretch: 1, maybe: 2, toss: 3 };
   function draw() {
     const counts = { keep: 0, maybe: 0, stretch: 0, toss: 0 };
-    for (const { v } of byId.values()) counts[v.bucket]++;
-    let items = [...byId.values()];
-    if (order === "hamsa") items.sort((a, b) => RANK[a.v.bucket] - RANK[b.v.bucket] || b.v.score - a.v.score || a.s.rank - b.s.rank);
+    for (const { v } of byId.values()) if (!v.dupOf) counts[v.bucket]++;
+    // Duplicate submissions show inside the card that leads them.
+    let items = [...byId.values()].filter(({ v }) => !v.dupOf);
+    if (order === "hamsa") items.sort((a, b) => RANK[a.v.bucket] - RANK[b.v.bucket] || b.v.score - a.v.score || (b.v.gravity || 0) - (a.v.gravity || 0) || a.s.rank - b.s.rank);
     const visible = items.filter(({ v }) => show[v.bucket]);
     list.replaceChildren(...(visible.length ? visible.map(storyCard) : [h("div", { class: "h-note" }, "Nothing in the buckets you chose. Switch on Maybe or Toss above.")]));
     chips.replaceChildren(...["keep", "stretch", "maybe", "toss"].map((b) => {
@@ -141,8 +151,8 @@
   }
 
   status.replaceWith(
-    h("p", { class: "h-lede" }, `${data.stories.length} stories from ${pagesRead} page${pagesRead > 1 ? "s" : ""} scored on this computer. No AI call was made for this view.`),
+    h("p", { class: "h-lede" }, `${data.stories.length} stories from ${pagesRead} page${pagesRead > 1 ? "s" : ""} scored on this computer${data.verdicts.some((x) => x.dupOf) ? `, ${data.verdicts.filter((x) => x.dupOf).length} duplicate submissions merged` : ""}. No AI call was made for this view.`),
     banners, chips, list);
   draw();
-  H.watch(ui, (s) => { if (s.layer === false) location.reload(); });
-})();
+  H.watch(ui, (s) => { ui.linkTarget = s.linkTarget; if (s.layer === false) location.reload(); });
+})().catch((e) => globalThis.HamsaUI?.fail(e?.message || String(e), "front"));

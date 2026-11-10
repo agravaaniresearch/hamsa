@@ -7,7 +7,12 @@ Hamsa filters Hacker News before any model sees it. It is a Firefox add-on that 
 - **Summaries on request**: one call with your own key, on the comments that survived. The card shows the tokens sent and received and the cost, and the header keeps today's total.
 - **Daily digest**: the front pages grouped into topics once a day, with no model.
 - **Blocklist**: a shareable JSON file of topic groups, written by hand, drafted by the model from your own words, or suggested from what you dismiss.
-- **Theme**: Auto, Light and Dark, as in Parshva.
+- **Reading**: a survivors-only scroll by default, with rebuttals under what they answer, smooth collapsing and j / k keys; or the full tree with tossed threads collapsed away. Duplicate submissions and near-duplicate comments are merged.
+- **Ranking**: relevance first, then quality (HN's own vote-driven order, author karma, replies); ties on the front page broken by HN's gravity formula.
+- **Learning from what you open**: sites, titles and tags you click become signals, and the reading log exports as JSONL for tuning a local model. Links can open in background tabs.
+- **Look**: Auto, Light and Dark as in Parshva, with warm, neutral or black dark styles; five bundled fonts; text size, width, justified text and density; the plain HN pages themed to match.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 See [DESIGN.md](DESIGN.md) for the reasoning and [SCHEMA.md](SCHEMA.md) for every rule, weight and file format.
 
@@ -23,8 +28,8 @@ OpenAI-compatible (OpenAI, DeepSeek, xAI, Qwen, Mistral, Groq, Together, Firewor
 
 - `extension/lib`: `front` (listing pages), `parse`, `prune`, `render`, `thread` (comments), `score` (the 0 to 1 score), `graph` (tag relevance), `profile` (sites, favourites, history), `blocklist`, `cluster` (digest), `summarise`, `providers`, `pricing`, `raindrop`, `store`
 - `extension/background.js`: all network calls, scoring and state changes
-- `extension/content`: the in-page layer (`boot`, `common`, `front`, `thread`, `hamsa.css`)
-- `extension/digest`, `extension/options`, `extension/shared`
+- `extension/content`: the in-page layer (`boot`, `common`, `front`, `thread`, `hamsa.css`, `skin.css`)
+- `extension/digest`, `extension/options`, `extension/shared`, `extension/fonts` (bundled, SIL OFL)
 - `test`: `npm test`
 
 ## Build and release

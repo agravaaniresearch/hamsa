@@ -1,0 +1,20 @@
+import { TagGraph, buildState } from "../extension/lib/graph.js";
+import fs from "node:fs";
+import { parseHTML } from "linkedom";
+import { mergePages, prepare } from "../extension/lib/thread.js";
+let seed = 1; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const vocab = Array.from({ length: 9000 }, (_, i) => "w" + i.toString(36) + "x");
+const tags = Array.from({ length: 5200 }, (_, i) => "tag-" + vocab[i]);
+const items = Array.from({ length: 4400 }, () => {
+  const t = Array.from({ length: 3 + Math.floor(rnd() * 4) }, () => tags[Math.floor(Math.pow(rnd(), 2) * tags.length)]);
+  const title = Array.from({ length: 8 }, () => vocab[Math.floor(rnd() * vocab.length)]).join(" ") + " model data security india";
+  return { title, excerpt: title, tags: t };
+});
+let t0 = Date.now(); const st = buildState(items); console.log("build", Date.now() - t0, "ms");
+t0 = Date.now(); const g = new TagGraph(st); console.log("compile", Date.now() - t0, "ms, tags in use", g.size);
+const titles = Array.from({ length: 120 }, () => Array.from({ length: 9 }, () => vocab[Math.floor(rnd() * vocab.length)]).join(" "));
+t0 = Date.now(); g.scoreTitles(titles); console.log("120 titles", Date.now() - t0, "ms");
+const html = fs.readFileSync(new URL("../fixtures/threads/50366117.html", import.meta.url), "utf8");
+const th = mergePages([html], (h) => parseHTML(h).document);
+const big = { story: th.story, comments: Array.from({ length: 4 }, (_, k) => th.comments.map((c) => ({ ...c, id: c.id * 10 + k, path: `${k}${c.path}`, parent_path: c.parent_path ? `${k}${c.parent_path}` : null }))).flat() };
+t0 = Date.now(); prepare(big, g, {}); console.log(big.comments.length, "comments", Date.now() - t0, "ms");

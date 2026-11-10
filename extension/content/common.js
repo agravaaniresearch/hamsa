@@ -37,6 +37,7 @@
     original: [["path", { d: "M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" }], ["circle", { cx: 12, cy: 12, r: 3 }]],
     digest: [["path", { d: "M5 4h14v16H5z" }], ["path", { d: "M8 8h8M8 12h8M8 16h5" }]],
     up: [["path", { d: "M12 6l6 9H6z", fill: "currentColor", stroke: "none" }]],
+    bg: [["rect", { x: 3, y: 7, width: 13, height: 13, rx: 2 }], ["path", { d: "M8 3h13v13" }], ["path", { d: "M14 10l7-7" }]],
   };
   function icon(name, size = 18) {
     const s = document.createElementNS(SVGNS, "svg");
@@ -49,20 +50,48 @@
     return s;
   }
 
-  async function send(msg) {
-    const r = await api.runtime.sendMessage(msg);
-    if (r?.error) throw new Error(r.error);
-    return r;
+  // Retries while the background page is still starting (the usual first-load failure after an
+  // install or a browser start). An error reported by a handler is not retried.
+  async function send(msg, tries = 5) {
+    for (let i = 0; ; i++) {
+      let r;
+      try {
+        r = await api.runtime.sendMessage(msg);
+      } catch (e) {
+        if (i >= tries - 1) { logError(msg.type, e); throw new Error(`Hamsa's background page did not answer (${e.message}).`); }
+        await new Promise((ok) => setTimeout(ok, 250 * (i + 1)));
+        continue;
+      }
+      if (r === undefined && i < tries - 1) { await new Promise((ok) => setTimeout(ok, 250 * (i + 1))); continue; }
+      if (r?.error) throw new Error(r.error);
+      return r;
+    }
+  }
+  function logError(where, e) {
+    try { api.runtime.sendMessage({ type: "log-error", where, message: String(e?.message || e) }).catch(() => {}); } catch { /* nothing to report to */ }
+  }
+
+  // A visible failure with a way out, instead of a half-drawn page.
+  function fail(message, where) {
+    logError(where || "page", message);
+    const root = mount();
+    root.replaceChildren(h("div", { class: "h-wrap" }, h("main", { class: "h-main" },
+      h("div", { class: "h-err" }, `Hamsa could not load this page: ${message}`),
+      h("div", { class: "h-row" },
+        h("button", { class: "h-btn primary", type: "button", onclick: () => location.reload() }, "Try again"),
+        h("button", { class: "h-btn", type: "button", onclick: release }, "Show plain HN")),
+      h("p", { class: "h-note" }, "The error is also listed in Hamsa settings, under Recent problems."))));
   }
 
   // ---- theme: Auto -> Light -> Dark, as in Parshva ----
   const THEME_NEXT = { auto: "light", light: "dark", dark: "auto" };
   const THEME_LABEL = { auto: "Auto (follows your system)", light: "Light", dark: "Dark" };
+  // Theme and reading options live in boot.js (it runs first on every HN page); this passes changes on.
   function applyTheme(theme, font) {
+    const T = globalThis.HamsaTheme;
+    if (T) return T.apply({ ...T.current(), theme, ...(font ? { font } : {}) });
     const root = document.documentElement;
-    if (theme === "light" || theme === "dark") root.setAttribute("data-hamsa-theme", theme);
-    else root.removeAttribute("data-hamsa-theme");
-    root.setAttribute("data-hamsa-font", font || "system");
+    if (theme === "light" || theme === "dark") root.setAttribute("data-hamsa-theme", theme); else root.removeAttribute("data-hamsa-theme");
   }
 
   // ---- layer on / off ----
@@ -171,7 +200,10 @@
     let href = startHref;
     for (let i = 0; i < max && href; i++) {
       await sleep(i ? 700 : 300);
-      const res = await fetch(new URL(href, location.href).href, { credentials: "include" });
+      const url = new URL(href, location.href).href;
+      let res = await fetch(url, { credentials: "include" });
+      // HN answers 503 when pages are requested too quickly; wait and try that page once more.
+      if (res.status === 503) { await sleep(2500); res = await fetch(url, { credentials: "include" }); }
       if (!res.ok) break;
       const html = await res.text();
       pages.push(html);
@@ -187,10 +219,32 @@
     api.storage.onChanged.addListener((ch) => {
       if (!ch.settings) return;
       const s = ch.settings.newValue || {};
-      if (s.theme !== ui.theme || s.font !== ui.font) { ui.theme = s.theme; ui.font = s.font; applyTheme(ui.theme, ui.font); }
+      ui.theme = s.theme;
       if (onChange) onChange(s);
     });
   }
 
-  globalThis.HamsaUI = { api, h, fill, icon, send, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
+  // ---- links: where they open, and what gets remembered ----
+  // entry: { kind: story|thread|link, id, title, url, domain, tags, score, bucket, page }
+  function track(a, entry, ui) {
+    const log = (background) => send({ type: "opened", entry: { ...entry, url: entry.url || a.href, background } }, 2).catch(() => {});
+    a.addEventListener("click", (e) => {
+      if (e.button !== 0) return;
+      const modified = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
+      const target = ui?.linkTarget || "same";
+      if (!modified && target !== "same" && /^https?:/i.test(a.href)) {
+        e.preventDefault();
+        openTab(a.href, target === "new", entry);
+        return;
+      }
+      log(modified);
+    });
+    a.addEventListener("auxclick", (e) => { if (e.button === 1) log(true); });
+    return a;
+  }
+  function openTab(url, active, entry) {
+    return send({ type: "open-tab", url, active: !!active, entry }).then(() => { if (!active) toast("Opened in a background tab"); }).catch((e) => toast(e.message));
+  }
+
+  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
 })();

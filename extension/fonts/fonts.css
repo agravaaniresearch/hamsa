@@ -1,0 +1,11 @@
+/* Bundled reading fonts (SIL OFL 1.1, see LICENSE.md). Used by the extension's own pages. */
+@font-face { font-family: "Hamsa Inter"; font-weight: 400; font-display: swap; src: url("inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Inter"; font-weight: 600 700; font-display: swap; src: url("inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Literata"; font-weight: 400; font-display: swap; src: url("literata-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Literata"; font-weight: 600 700; font-display: swap; src: url("literata-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Source Serif"; font-weight: 400; font-display: swap; src: url("source-serif-4-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Source Serif"; font-weight: 600 700; font-display: swap; src: url("source-serif-4-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Atkinson"; font-weight: 400; font-display: swap; src: url("atkinson-hyperlegible-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Atkinson"; font-weight: 600 700; font-display: swap; src: url("atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Plex Mono"; font-weight: 400; font-display: swap; src: url("ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Plex Mono"; font-weight: 600 700; font-display: swap; src: url("ibm-plex-mono-latin-600-normal.woff2") format("woff2"); }

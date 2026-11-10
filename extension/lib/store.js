@@ -31,7 +31,20 @@ export const DEFAULT_SETTINGS = {
   sources: { ...DEFAULT_SOURCES },
   hnUser: "",              // read from the page when you are logged in
   gate: true,              // comments below the interest floor do not reach the model
-  font: "system",          // system | serif | mono
+  karma: true,             // read author karma from HN's public API
+  readingLog: true,        // remember what you open (stays in this browser) and use it as a signal
+  linkTarget: "same",      // same | new | background: where story links open
+  threadView: "survivors", // survivors | tree
+  threadSort: "best",      // best | relevance | thread
+  collapseTossed: false,   // tree view: hide the folds of tossed and removed comments entirely
+  titleFont: "system",     // system | inter | literata | source-serif | atkinson | plex-mono
+  textSize: "m",           // s | m | l | xl
+  width: "normal",         // narrow | normal | wide
+  justify: false,
+  density: "comfortable",  // comfortable | compact
+  darkStyle: "warm",       // warm | neutral | black
+  skin: true,              // theme the plain HN pages Hamsa does not redraw (profiles, replies, Original view)
+  font: "system",          // body font: system | inter | literata | source-serif | atkinson | plex-mono
   budgetTokens: 30000,
   maxOutputTokens: 1500,
   fx: 95,                  // INR per USD
@@ -44,9 +57,13 @@ export const DEFAULT_SETTINGS = {
   thumbsDefault: false,
 };
 
+// Everything except the tag graph and the summary cache, which can run to megabytes. The background
+// keeps the graph in memory (see loadGraph in background.js); pages never need it.
 export async function getState() {
-  const s = await api.storage.local.get({ providers: [], settings: {}, graph: null, profile: null, blocklist: null, dismissed: [], raindropToken: "", cache: {}, usage: {}, usageDaily: {} });
-  const raw = s.settings || {};
+  const s = await api.storage.local.get({ providers: [], settings: {}, profile: null, blocklist: null, dismissed: [], raindropToken: "", usage: {}, usageDaily: {} });
+  const raw = { ...(s.settings || {}) };
+  if (raw.font === "serif") raw.font = "source-serif"; // 0.2 values
+  if (raw.font === "mono") raw.font = "plex-mono";
   s.settings = { ...DEFAULT_SETTINGS, ...raw, scoring: { ...SCORING_DEFAULTS, ...(raw.scoring || {}) }, sources: { ...DEFAULT_SOURCES, ...(raw.sources || {}) } };
   s.blocklist = s.blocklist || emptyBlocklist();
   return s;

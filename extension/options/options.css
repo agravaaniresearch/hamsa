@@ -264,3 +264,4 @@ details.card { margin-top: 14px; }
 .models { display: flex; flex-wrap: wrap; gap: 6px; }
 .models label { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-2); border-radius: 6px; padding: 3px 9px; font-size: 12.5px; }
 .models input { width: auto; margin: 0; }
+.sample { margin-top: 14px; padding: 14px 16px; border: 1px dashed var(--field); border-radius: 10px; background: var(--surface); line-height: 1.55; }

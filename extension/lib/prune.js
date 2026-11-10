@@ -2,7 +2,8 @@
 // Every comment ends with a verdict: { score, total, reasons, bucket, rule, rules }.
 // Depth never lowers a score; a rebuttal deep in a chain is protected, and so is the comment it answers.
 import { DEFAULTS, estTokens } from './config.js';
-import { scoreComment, SCORING_DEFAULTS, RULES_VERSION } from './score.js';
+import { scoreComment, SCORING_DEFAULTS, RULES_VERSION, squash, tagReasons } from './score.js';
+import { tokenize } from './tokenize.js';
 
 const wordCount = (s) => (s.match(/\S+/g) || []).length;
 const hasNumber = (s) => /\d{2,}|\d+\s?%|[$€£₹]\s?\d/.test(s);
@@ -19,7 +20,7 @@ export function prune(thread, userCfg = {}, relModel = null) {
   const scoring = { ...SCORING_DEFAULTS, ...(userCfg.scoring || {}) };
   const all = thread.comments;
   const pruned = [];
-  const stats = { rows_seen: all.length, unavailable: 0, pruned: { downvoted: 0, abusive: 0, flame_chain: 0, meta: 0, quote_only: 0, short: 0, below_floor: 0, budget: 0 } };
+  const stats = { rows_seen: all.length, unavailable: 0, pruned: { downvoted: 0, abusive: 0, flame_chain: 0, meta: 0, quote_only: 0, short: 0, duplicate: 0, below_floor: 0, budget: 0 } };
 
   const drop = (c, reason, detail = '') => {
     c.dropped = reason;
@@ -58,10 +59,26 @@ export function prune(thread, userCfg = {}, relModel = null) {
 
   // Personal relevance (tag graph). Without a graph every comment is neutral.
   const rels = relModel ? relModel.scoreBatch(live.map((c) => c.text)) : null;
+  // The story's own relevance: comments on its subject count as on-topic.
+  let story = null;
+  if (relModel) {
+    const head = `${thread.story.title} ${(thread.story.text || '').slice(0, 400)}`;
+    const st = relModel.scoreTitles([head])[0];
+    const reasons = tagReasons(st.contribs.filter((x) => !x.via));
+    story = {
+      tags: reasons.map((x) => x.tag),
+      score: squash(reasons.reduce((a, x) => a + x.points, 0), scoring.ceiling),
+      terms: new Set(tokenize(head).filter((t) => t.length > 3)),
+    };
+  }
+  thread.story.context = story ? { tags: story.tags, score: story.score } : null;
+  // In document order, so a parent is always scored before its replies.
   live.forEach((c, i) => {
     c.rel = rels ? rels[i].score : 0;
     c.relevance = rels ? rels[i] : null;
-    c.verdict = scoreComment(c, { scoring, hasGraph: !!relModel });
+    c.tokens = new Set(tokenize(c.text));
+    const parent = c.parent_path ? byPathLive.get(c.parent_path) : null;
+    c.verdict = scoreComment(c, { scoring, hasGraph: !!relModel, story, parentTagPoints: parent?.verdict?.tagPoints || 0, karma: cfg.karma });
   });
   const protectedC = (c) => c.rebuttal || c.answered || c.op;
 
@@ -143,6 +160,32 @@ export function prune(thread, userCfg = {}, relModel = null) {
     if (c.words < cfg.minWords && !isEvidence(c) && c.subtree_size <= 1 && c.rel < cfg.relKeep) drop(c, 'short', `${c.words} words`);
   }
 
+  // 9a. Near-duplicates: the same point made twice. The better-ranked comment stays and lists the others.
+  {
+    const shingles = (c) => { const t = tokenize(c.text); const out = new Set(); for (let i = 0; i + 2 < t.length; i++) out.add(`${t[i]} ${t[i + 1]} ${t[i + 2]}`); return out; };
+    const pool = live.filter((c) => !c.dropped).map((c) => ({ c, sh: shingles(c) })).filter((x) => x.sh.size >= 6);
+    const index = new Map();
+    pool.forEach((x, i) => { for (const s of x.sh) { if (!index.has(s)) index.set(s, []); index.get(s).push(i); } });
+    const pairs = new Map();
+    for (const list of index.values()) {
+      if (list.length < 2 || list.length > 40) continue;
+      for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { const k = `${list[a]}:${list[b]}`; pairs.set(k, (pairs.get(k) || 0) + 1); }
+    }
+    for (const [k, n] of pairs) {
+      if (n < 2) continue;
+      const [ia, ib] = k.split(':').map(Number);
+      const A = pool[ia], Bx = pool[ib];
+      if (A.c.dropped || Bx.c.dropped) continue;
+      const jac = n / (A.sh.size + Bx.sh.size - n);
+      if (jac < 0.5) continue;
+      const [keep, lose] = A.c.score >= Bx.c.score ? [A.c, Bx.c] : [Bx.c, A.c];
+      if (protectedC(lose)) continue;
+      drop(lose, 'duplicate', `same point as [${keep.path}]`);
+      lose.dupOf = keep.id;
+      (keep.dups ||= []).push(lose.id);
+    }
+  }
+
   // 9. Stretch picks: substantial top-level comments outside your tags. Then the interest floor:
   //    with a tag graph, comments that match none of your interests stay on the page but do not reach the model.
   if (relModel) {
@@ -158,6 +201,25 @@ export function prune(thread, userCfg = {}, relModel = null) {
       for (const c of live) {
         if (c.dropped || protectedC(c) || c.stretch) continue;
         if (c.verdict.bucket === 'toss') drop(c, 'below_floor', `score ${c.verdict.score}`);
+      }
+    }
+  }
+
+  // 9b. Minimum survivors: a long thread is never cut to almost nothing by the interest floor.
+  //     The best-ranked held-back comments come back as maybe, and say why.
+  if (relModel && cfg.gate !== false) {
+    const alive = live.filter((c) => !c.dropped || c.dropped === 'below_floor');
+    const need = Math.min(alive.length, Math.max(cfg.minSurvivors ?? 15, Math.ceil((cfg.minSurvivorShare ?? 0.08) * alive.length)));
+    const have = live.filter((c) => !c.dropped).length;
+    if (have < need) {
+      const back = live.filter((c) => c.dropped === 'below_floor').sort((a, b) => b.verdict.quality - a.verdict.quality).slice(0, need - have);
+      for (const c of back) {
+        c.dropped = undefined;
+        stats.pruned.below_floor--;
+        const i = pruned.findIndex((p) => p.id === c.id);
+        if (i >= 0) pruned.splice(i, 1);
+        c.verdict.bucket = 'maybe';
+        c.verdict.reasons.unshift({ kind: 'floor', label: 'Kept so the thread is not empty: ranked high by HN', points: 0 });
       }
     }
   }
@@ -185,6 +247,8 @@ export function prune(thread, userCfg = {}, relModel = null) {
     if (c.dropped === 'below_floor' || c.dropped === 'budget') c.verdict.rule = c.dropped;
     if (c.rebuttal) c.verdict.rebuttal = true;
     if (c.answered) c.verdict.answered = true;
+    if (c.dupOf) c.verdict.dupOf = c.dupOf;
+    if (c.dups) c.verdict.dups = c.dups;
     c.verdict.sent = !c.dropped;
   }
 

@@ -10,14 +10,14 @@
   // A comment permalink (item?id= of a comment) has no story title: leave it as plain HN.
   if (!fat.querySelector(".titleline")) return H.release();
   let ui;
-  try { ui = await H.send({ type: "ui-state" }); } catch { return H.release(); }
+  try { ui = await H.send({ type: "ui-state" }); } catch (e) { return H.fail(e.message, "ui-state"); }
   if (!ui.layer) return H.release();
   H.applyTheme(ui.theme, ui.font);
 
   const RULES = {
     unavailable: "Dead, flagged or deleted", downvoted: "Heavily downvoted", abusive: "Insults or swearing",
     flame_chain: "Flame chain, same two people", meta: "About the site, title or paywall", quote_only: "Only quotes its parent",
-    short: "Short, no evidence", below_floor: "Below your interest floor", budget: "Over the token budget",
+    short: "Short, no evidence", duplicate: "Near-duplicate of a kept comment", below_floor: "Below your interest floor", budget: "Over the token budget",
   };
 
   const HELD = ["below_floor", "budget"];
@@ -36,7 +36,7 @@
     status.lastChild.textContent = "Cleaning and scoring…";
     data = await H.send({ type: "thread", id, pages: [first, ...more] });
   } catch (e) {
-    status.replaceWith(h("div", { class: "h-err" }, `Hamsa could not read this thread: ${e.message}`), h("button", { class: "h-btn", onclick: H.showOriginal }, "Show plain HN"));
+    return H.fail(e.message, "thread");
     return;
   }
   const V = data.verdicts;
@@ -59,7 +59,7 @@
   const form = fat.querySelector('form[action="comment"]');
   const storyVote = fat.querySelector(`a#up_${id}`);
   const head = h("section", { class: "h-card h-story-head", style: "display:flex;flex-direction:column;gap:8px" },
-    h("a", { class: "h-stitle", href: titleA?.getAttribute("href") || `item?id=${id}`, rel: "noopener noreferrer" }, data.title),
+    H.track(h("a", { class: "h-stitle", href: titleA?.getAttribute("href") || `item?id=${id}`, rel: "noopener noreferrer" }, data.title), { kind: "story", id, title: data.title, domain: data.domain, tags: data.context?.tags || [], page: "thread" }, ui),
     h("div", { class: "h-meta" },
       voteBtn(storyVote),
       data.domain ? h("a", { href: `from?site=${encodeURIComponent(data.domain)}` }, data.domain) : null,
@@ -174,7 +174,7 @@
           h("button", { class: "h-btn ghost", type: "button", onclick: async (e) => { const o = await H.send({ type: "save-point", id, title: r.title, tags: p.tags, point: p.claim }).catch((x) => ({ note: x.message })); e.target.textContent = o.saved ? "Saved" : "Counted"; H.toast(o.note); } }, "Save to Raindrop")) : null)),
       s.disagreements.length ? h("div", {}, h("h3", {}, "Real disagreements"), s.disagreements.map((d) => h("div", { class: "h-point" }, h("strong", {}, d.question), d.sides.map((x) => h("div", {}, h("strong", {}, x.position.replace(/[.:;,\s]+$/, "")), ": ", x.best_case, " ", refsRow(x.refs)))))) : null,
       s.corrections.length ? h("div", {}, h("h3", {}, "Corrections"), s.corrections.map((c) => h("div", { class: "h-point" }, h("span", {}, c.claim, " → ", c.correction), refsRow(c.refs)))) : null,
-      s.links.length ? h("div", {}, h("h3", {}, "Links that carry evidence"), s.links.map((l) => h("div", { class: "h-point" }, h("a", { href: l.url, rel: "noopener noreferrer", target: "_blank" }, l.url), h("span", { class: "h-note" }, l.why)))) : null,
+      s.links.length ? h("div", {}, h("h3", {}, "Links that carry evidence"), s.links.map((l) => h("div", { class: "h-point" }, H.track(h("a", { href: l.url, rel: "noopener noreferrer", target: "_blank" }, l.url), { kind: "link", id, title: data.title, page: "summary" }, ui), h("span", { class: "h-note" }, l.why)))) : null,
       h("div", { class: "h-row" },
         h("button", { class: "h-btn", type: "button", onclick: async (e) => { await navigator.clipboard.writeText(toMarkdown(r)); e.target.textContent = "Copied"; } }, "Copy as Markdown"),
         h("button", { class: "h-btn", type: "button", onclick: () => run(true) }, "Summarise again"),
@@ -182,54 +182,101 @@
   }
 
   // ---- comments ----
+  // Two views. Survivors (the default): one scroll of what survived, best first, each rebuttal placed
+  // under the comment it answers. Tree: the thread in place, with folds that say what was hidden and why.
   const show = { keep: true, stretch: true, maybe: true, toss: false, removed: false };
   const forced = new Set();     // comments opened from a fold or a summary reference
-  const collapsed = new Set();  // paths whose replies are hidden
+  const collapsed = new Set();  // tree: paths whose replies are hidden
+  const shut = new Set();       // comments folded to one line
+  const openDups = new Set();
+  let view = ui.threadView === "tree" ? "tree" : "survivors";
+  let sort = ui.threadSort || "best";
+  let hideTossed = !!ui.collapseTossed;
   const bodies = new Map();
   const list = h("div", { class: "h-comments" });
   const chips = h("div", { class: "h-row" });
+  const controls = h("div", { class: "h-row" });
+  const byId = new Map(rows.map((r) => [r.id, r]));
 
   const ancestors = (path) => { const out = []; const p = path.split("."); while (p.length > 1) { p.pop(); out.push(p.join(".")); } return out; };
   const isProtected = (v) => (v.rebuttal || v.answered) && v.bucket !== "removed";
   const baseVisible = (r) => show[r.v.bucket] || isProtected(r.v) || forced.has(r.id);
+  const textOf = (r) => (r.row.querySelector(".commtext")?.textContent || "").replace(/\s+/g, " ").trim();
+  const clip = (t, n = 170) => (t.length > n ? `${t.slice(0, n).trimEnd()}…` : t);
+  const whoOf = (r) => r.row.querySelector('a.hnuser, .comhead a[href^="user?id="]')?.textContent || r.v.author || "[deleted]";
 
   function body(r) {
     if (!bodies.has(r.id)) {
       const t = r.row.querySelector(".commtext");
       bodies.set(r.id, t ? t.cloneNode(true) : h("span", { class: "h-note" }, r.v.bucket === "removed" ? "[dead or deleted]" : ""));
     }
-    return bodies.get(r.id).cloneNode(true);
+    const node = bodies.get(r.id).cloneNode(true);
+    // Links people open from comments are part of the reading log.
+    for (const a of node.querySelectorAll?.("a[href]") || []) {
+      if (/^https?:/i.test(a.href)) H.track(a, { kind: "link", id: r.id, title: data.title, page: "thread", tags: r.v.tags, score: r.v.score, bucket: r.v.bucket }, ui);
+    }
+    return node;
   }
 
-  function card(r, mode) {
+  function toggle(r, el) {
+    const now = !shut.has(r.id);
+    now ? shut.add(r.id) : shut.delete(r.id);
+    el.classList.toggle("h-collapsed", now);
+    const b = el.querySelector(".h-tog");
+    if (b) { b.textContent = now ? "+" : "−"; b.setAttribute("aria-expanded", String(!now)); }
+  }
+
+  function card(r, mode, opts = {}) {
     const v = r.v;
-    const who = r.row.querySelector('a.hnuser, .comhead a[href^="user?id="]')?.textContent || v.author || "[deleted]";
+    const who = whoOf(r);
     const age = r.row.querySelector(".age")?.textContent?.trim() || "";
     const why = h("div", { hidden: true }, H.whyPanel(v, ui.scoring));
     const whyBtn = h("button", { type: "button" }, "why this score");
     whyBtn.addEventListener("click", () => { why.hidden = !why.hidden; whyBtn.textContent = why.hidden ? "why this score" : "hide reasons"; });
-    const kids = rows.filter((x) => x.v.path.startsWith(`${v.path}.`)).length;
+    const kids = opts.flat ? 0 : rows.filter((x) => x.v.path.startsWith(`${v.path}.`)).length;
     const fold = kids ? h("button", { type: "button" }, collapsed.has(v.path) ? `show replies (${kids})` : `hide replies (${kids})`) : null;
     fold?.addEventListener("click", () => { collapsed.has(v.path) ? collapsed.delete(v.path) : collapsed.add(v.path); draw(); });
     const flags = [
-      v.rebuttal ? h("span", { class: "h-flag" }, "rebuttal, protected") : null,
-      v.answered && !v.rebuttal ? h("span", { class: "h-flag plain" }, "kept as parent of a rebuttal") : null,
+      v.rebuttal ? h("span", { class: "h-flag" }, opts.rebut ? `rebuts @${whoOf(opts.replyTo)}` : "rebuttal, protected") : null,
+      v.answered && !v.rebuttal ? h("span", { class: "h-flag plain" }, "answered by a rebuttal") : null,
       v.stretch ? h("span", { class: "h-flag stretch" }, "stretch pick") : null,
       v.rule && v.bucket !== "removed" ? h("span", { class: "h-flag plain" }, `not sent: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       v.bucket === "removed" ? h("span", { class: "h-flag plain" }, `removed: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       mode === "context" ? h("span", { class: "h-flag plain" }, "shown for context") : null,
     ];
     const reply = r.row.querySelector('a[href^="reply?"]')?.getAttribute("href") || `reply?id=${r.id}&goto=${encodeURIComponent(`item?id=${id}#${r.id}`)}`;
-    const cls = ["h-c", v.depth ? "h-indent" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : ""].join(" ");
-    return h("div", { class: cls, id: `hamsa-c-${r.id}`, style: `margin-left:${Math.min(v.depth, 8) * 20}px;padding-left:${v.depth ? 10 : 0}px` },
+    // In the survivors view a reply says what it answers, and can show it.
+    let replyTo = null;
+    if (opts.flat && opts.replyTo && !opts.rebut) {
+      const p = opts.replyTo;
+      const quote = h("div", { class: "h-quote", hidden: true }, clip(textOf(p), 400));
+      const b = h("button", { type: "button" }, "show");
+      b.addEventListener("click", () => { quote.hidden = !quote.hidden; b.textContent = quote.hidden ? "show" : "hide"; });
+      replyTo = [h("div", { class: "h-replyto" }, h("span", {}, `↳ reply to @${whoOf(p)}:`), h("span", {}, clip(textOf(p), 90)), b), quote];
+    }
+    const dups = (v.dups || []).map((x) => byId.get(x)).filter(Boolean);
+    const dupBox = dups.length && openDups.has(r.id) ? h("div", { class: "h-dups" }, dups.map((d) => card(d, "removed", { flat: true }))) : null;
+    const dupBtn = dups.length ? h("button", { type: "button", onclick: () => { openDups.has(r.id) ? openDups.delete(r.id) : openDups.add(r.id); draw(); } }, openDups.has(r.id) ? "hide similar" : `+${dups.length} similar ${dups.length > 1 ? "comments" : "comment"}`) : null;
+    const isShut = shut.has(r.id);
+    const tog = h("button", { class: "h-tog", type: "button", title: "Collapse or expand this comment (c)", "aria-expanded": String(!isShut) }, isShut ? "+" : "−");
+    const indent = opts.flat ? 0 : Math.min(v.depth, 8) * 20;
+    const cls = ["h-c", !opts.flat && v.depth ? "h-indent" : "", opts.rebut ? "h-rebut" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : "", isShut ? "h-collapsed" : ""].join(" ");
+    const el = h("div", { class: cls, id: `hamsa-c-${r.id}`, "data-cid": String(r.id), style: `margin-left:${indent}px;padding-left:${!opts.flat && v.depth ? 10 : opts.rebut ? 10 : 0}px` },
       h("div", { class: "h-card" },
         h("div", { class: "h-chead" },
-          h("div", { class: "who" }, voteBtn(r.row.querySelector(`a#up_${r.id}`)), h("a", { href: `user?id=${encodeURIComponent(who)}` }, h("strong", {}, who)), who === data.author ? h("span", { class: "h-op" }, "OP") : null, h("span", { class: "when" }, age), flags),
+          h("div", { class: "who" }, tog, voteBtn(r.row.querySelector(`a#up_${r.id}`)), h("a", { href: `user?id=${encodeURIComponent(who)}` }, h("strong", {}, who)), who === data.author ? h("span", { class: "h-op" }, "OP") : null, h("span", { class: "when" }, age), flags),
           H.badge(v.bucket, v.score)),
-        h("div", { class: "h-cbody" }, body(r)),
-        v.tags.length ? h("div", { class: "h-row", style: "margin-bottom:6px" }, tagButtons(v.tags)) : null,
-        why,
-        h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold)));
+        replyTo,
+        h("div", { class: "h-preview", title: "Expand" }, clip(textOf(r), 200)),
+        h("div", { class: "h-cwrap" }, h("div", {},
+          h("div", { class: "h-cbody" }, body(r)),
+          v.tags.length ? h("div", { class: "h-row", style: "margin-bottom:6px" }, tagButtons(v.tags)) : null,
+          why,
+          h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold, dupBtn),
+          dupBox))));
+    tog.addEventListener("click", () => toggle(r, el));
+    el.querySelector(".h-preview").addEventListener("click", () => toggle(r, el));
+    return el;
   }
 
   function foldRow(group) {
@@ -242,14 +289,40 @@
     return h("div", { class: "h-fold", style: `margin-left:${Math.min(minDepth, 8) * 20}px` }, h("span", {}, `${group.length} hidden: ${label}`), b);
   }
 
-  function draw() {
+  const bestKey = (r) => 0.7 * r.v.score + 0.3 * (r.v.quality || 0);
+  function survivors() {
+    return rows.filter((r) => !r.v.dupOf && r.v.bucket !== "removed" && (show[r.v.bucket] || isProtected(r.v) || forced.has(r.id)));
+  }
+  function survivorsList() {
+    const surv = survivors();
+    const ordered = sort === "thread" ? surv : surv.slice().sort(sort === "relevance" ? (a, b) => b.v.score - a.v.score : (a, b) => bestKey(b) - bestKey(a));
+    const inView = new Set(surv.map((r) => r.id));
+    const rebutsOf = new Map();
+    for (const r of surv) {
+      if (!r.v.rebuttal || !r.v.parent) continue;
+      const p = byPath.get(r.v.parent);
+      if (p && inView.has(p.id)) { if (!rebutsOf.has(p.id)) rebutsOf.set(p.id, []); rebutsOf.get(p.id).push(r); }
+    }
+    const placed = new Set([...rebutsOf.values()].flat().map((r) => r.id));
+    const out = [];
+    for (const r of ordered) {
+      if (placed.has(r.id)) continue;
+      out.push(card(r, "normal", { flat: true, replyTo: r.v.parent ? byPath.get(r.v.parent) : null }));
+      for (const rb of rebutsOf.get(r.id) || []) out.push(card(rb, "normal", { flat: true, rebut: true, replyTo: r }));
+    }
+    const rest = rows.length - surv.length;
+    if (rest) out.push(h("div", { class: "h-fold" }, h("span", {}, `${rest} more ${rest === 1 ? "comment is" : "comments are"} not in this view: below your interest floor, removed, or near-duplicates folded under the comment they repeat.`), h("button", { class: "h-btn", type: "button", onclick: () => setView("tree") }, "See them in the tree")));
+    return out.length ? out : [h("div", { class: "h-note" }, "No comments yet.")];
+  }
+  function treeList() {
     const visible = new Set(rows.filter(baseVisible).map((r) => r.v.path));
     const context = new Set();
     for (const p of visible) for (const a of ancestors(p)) if (!visible.has(a) && byPath.has(a)) context.add(a);
     const hiddenByCollapse = (p) => ancestors(p).some((a) => collapsed.has(a));
     const out = [];
     let group = [];
-    const flush = () => { if (group.length) out.push(foldRow(group)); group = []; };
+    let tossedHidden = 0;
+    const flush = () => { if (group.length) { if (hideTossed) tossedHidden += group.length; else out.push(foldRow(group)); } group = []; };
     for (const r of rows) {
       const p = r.v.path;
       if (hiddenByCollapse(p)) continue;
@@ -258,7 +331,15 @@
       else group.push(r);
     }
     flush();
-    list.replaceChildren(...(out.length ? out : [h("div", { class: "h-note" }, "No comments yet.")]));
+    if (hideTossed && tossedHidden) out.push(h("div", { class: "h-fold" }, h("span", {}, `${tossedHidden} tossed or removed comments are collapsed out of the tree.`), h("button", { class: "h-btn", type: "button", onclick: () => setTossed(false) }, "Show their folds")));
+    return out.length ? out : [h("div", { class: "h-note" }, "No comments yet.")];
+  }
+
+  async function setView(v) { view = v; cursor = -1; draw(); await H.send({ type: "set-ui", patch: { threadView: v } }).catch(() => {}); }
+  async function setTossed(on) { hideTossed = on; draw(); await H.send({ type: "set-ui", patch: { collapseTossed: on } }).catch(() => {}); }
+
+  function draw() {
+    list.replaceChildren(...(view === "survivors" ? survivorsList() : treeList()));
     const counts = { keep: 0, stretch: 0, maybe: 0, toss: 0, removed: 0 };
     for (const r of rows) counts[r.v.bucket]++;
     const label = { keep: "Keep", stretch: "Stretch", maybe: "Maybe", toss: "Below floor", removed: "Removed" };
@@ -267,12 +348,41 @@
       c.addEventListener("click", () => { show[b] = !show[b]; if (!show[b]) forced.clear(); draw(); });
       return c;
     }), h("span", { class: "h-grow" }), h("button", { class: "h-btn", type: "button", onclick: H.showOriginal }, "Show original thread"));
+    const seg = h("div", { class: "h-seg", role: "group", "aria-label": "Comment view" },
+      [["survivors", "Survivors"], ["tree", "Tree"]].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(view === k), onclick: () => setView(k) }, t)));
+    const sortSel = h("select", { class: "h-select", "aria-label": "Order of surviving comments" },
+      [["best", "Best: relevance and quality"], ["relevance", "Relevance only"], ["thread", "Thread order"]].map(([k, t]) => h("option", { value: k }, t)));
+    sortSel.value = sort;
+    sortSel.addEventListener("change", async () => { sort = sortSel.value; draw(); await H.send({ type: "set-ui", patch: { threadSort: sort } }).catch(() => {}); });
+    const tossBtn = h("button", { class: "h-btn", type: "button", "aria-pressed": String(hideTossed), onclick: () => setTossed(!hideTossed) }, hideTossed ? "Show tossed folds" : "Collapse tossed threads");
+    const all = (on) => { for (const el of list.querySelectorAll(".h-c[data-cid]")) { const r = byId.get(Number(el.dataset.cid)); if (r && shut.has(r.id) !== on) toggle(r, el); } };
+    controls.replaceChildren(seg, view === "survivors" ? sortSel : tossBtn,
+      h("button", { class: "h-btn ghost", type: "button", onclick: () => all(true) }, "Collapse all"),
+      h("button", { class: "h-btn ghost", type: "button", onclick: () => all(false) }, "Expand all"),
+      h("span", { class: "h-grow" }),
+      h("span", { class: "h-keys" }, h("kbd", {}, "j"), " ", h("kbd", {}, "k"), " move · ", h("kbd", {}, "c"), " collapse"));
   }
 
+  // j / k move between comments, c collapses the current one. Ignored while typing.
+  let cursor = -1;
+  document.addEventListener("keydown", (e) => {
+    if (!document.documentElement.classList.contains("hamsa-on") || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("textarea, input, select, [contenteditable]")) return;
+    const cards = [...list.querySelectorAll(":scope > .h-c")];
+    if (!cards.length || !["j", "k", "c"].includes(e.key)) return;
+    e.preventDefault();
+    if (e.key === "c") { const el = cards[cursor]; const r = el && byId.get(Number(el.dataset.cid)); if (r) toggle(r, el); return; }
+    cards[cursor]?.classList.remove("h-current");
+    cursor = Math.max(0, Math.min(cards.length - 1, cursor + (e.key === "j" ? 1 : -1)));
+    cards[cursor].classList.add("h-current");
+    cards[cursor].scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
   function jump(cid) {
-    if (!cid) return;
+    if (!cid || !V[cid]) return;
     forced.add(cid);
-    for (const a of ancestors(V[cid]?.path || "")) collapsed.delete(a);
+    if (view === "survivors" && (V[cid].bucket === "removed" || V[cid].dupOf)) view = "tree";
+    for (const a of ancestors(V[cid].path || "")) collapsed.delete(a);
+    shut.delete(cid);
     draw();
     const el = document.getElementById(`hamsa-c-${cid}`);
     if (!el) return;
@@ -300,10 +410,10 @@
         h("div", { class: "h-note" }, `Each comment carries its 0 to 1 score, the reasons behind it, its bucket and the rules version (v${data.rules}), so a re-score later needs no new fetching. Depth never lowers a score.`)));
   }
 
-  status.replaceWith(head, sumCard, chips, list);
+  status.replaceWith(head, sumCard, chips, controls, list);
   current ? drawSumResult() : drawSumIdle();
   draw();
   drawSide();
   if (location.hash && /^#\d+$/.test(location.hash)) jump(Number(location.hash.slice(1)));
-  H.watch(ui, (s) => { if (s.layer === false) location.reload(); });
-})();
+  H.watch(ui, (s) => { ui.linkTarget = s.linkTarget; if (s.layer === false) location.reload(); });
+})().catch((e) => globalThis.HamsaUI?.fail(e?.message || String(e), "thread"));
