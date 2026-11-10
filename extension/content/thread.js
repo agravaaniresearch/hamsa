@@ -58,6 +58,7 @@
   const top = fat.querySelector(".toptext");
   const form = fat.querySelector('form[action="comment"]');
   const storyVote = fat.querySelector(`a#up_${id}`);
+  const storyHref = titleA?.href || "";
   const head = h("section", { class: "h-card h-story-head", style: "display:flex;flex-direction:column;gap:8px" },
     H.track(h("a", { class: "h-stitle", href: titleA?.getAttribute("href") || `item?id=${id}`, rel: "noopener noreferrer" }, data.title), { kind: "story", id, title: data.title, domain: data.domain, tags: data.context?.tags || [], page: "thread" }, ui),
     h("div", { class: "h-meta" },
@@ -69,7 +70,8 @@
       h("span", {}, `· ${data.funnel.comments} comments`),
       h("span", {}, `· thread relevance ${data.threadRelevance.toFixed(2)}`)),
     top ? h("div", { class: "h-toptext" }, top.cloneNode(true)) : null,
-    h("div", { class: "h-row" }, h("span", { class: "h-note" }, "This story:"), H.thumbs({ id, kind: "story", title: data.title, domain: data.domain, tags: data.context?.tags || [] }, { pref: data.storyPref || null })));
+    h("div", { class: "h-row" }, h("span", { class: "h-note" }, "This story:"), H.thumbs({ id, kind: "story", title: data.title, domain: data.domain, url: storyHref, threadId: id, points: data.points, author: data.author, excerpt: top?.textContent?.trim().slice(0, 300), tags: data.context?.tags || [] }, { pref: data.storyPref || null })),
+    ui.previews !== false && /^https?:/i.test(storyHref) && !/news\.ycombinator\.com/.test(storyHref) ? H.previewSlot(storyHref, { ui, page: "thread", title: data.title, threadId: id, threadTitle: data.title }) : null);
   if (form) {
     const box = h("details", { class: "h-addc" }, h("summary", { class: "h-note", style: "cursor:pointer" }, "Add a comment"));
     box.append(form);
@@ -198,6 +200,13 @@
   const chips = h("div", { class: "h-row" });
   const controls = h("div", { class: "h-row" });
   const byId = new Map(rows.map((r) => [r.id, r]));
+  const SUB = data.subtopics || { groups: [], byBranch: {} };
+  const subOf = (r) => SUB.byBranch[r.v.path.split(".")[0]] || null;
+  const subLabel = new Map(SUB.groups.map((g) => [g.id, g.label]));
+  let topic = null; // the sub-discussion shown, or all
+  const inTopic = (r) => !topic || subOf(r) === topic;
+  const subChips = h("div", { class: "h-row h-subs" });
+  const discStrip = h("div");
 
   const ancestors = (path) => { const out = []; const p = path.split("."); while (p.length > 1) { p.pop(); out.push(p.join(".")); } return out; };
   const isProtected = (v) => (v.rebuttal || v.answered) && v.bucket !== "removed";
@@ -206,16 +215,82 @@
   const clip = (t, n = 170) => (t.length > n ? `${t.slice(0, n).trimEnd()}…` : t);
   const whoOf = (r) => r.row.querySelector('a.hnuser, .comhead a[href^="user?id="]')?.textContent || r.v.author || "[deleted]";
 
+  // ---- people's colours, quotes and typography ----
+  // Each person gets one bright colour for the whole thread, on their name, on quotes of their words and
+  // on the line that says a reply answers them.
+  const COLOURS = 8;
+  const colourOf = (name) => { let x = 0; for (const ch of String(name || "")) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % COLOURS; };
+  const qvar = (name) => `--q:var(--h-q${colourOf(name)})`;
+  const norm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const topText = norm(top?.textContent || "");
+  const titleText = norm(data.title);
+  const normMemo = new Map();
+  const normOf = (r) => { if (!normMemo.has(r.id)) normMemo.set(r.id, norm(textOf(r))); return normMemo.get(r.id); };
+  // Whose words a quote is: the nearest comment above it that contains them, else the story.
+  function quotedFrom(r, text) {
+    const n = norm(text);
+    if (n.length < 8) return null;
+    const needle = n.length > 60 ? n.slice(0, 60) : n;
+    for (const a of ancestors(r.v.path)) { const p = byPath.get(a); if (p && normOf(p).includes(needle)) return { who: whoOf(p), id: p.id }; }
+    if (topText.includes(needle) || titleText.includes(needle)) return { who: data.author || "the story", story: true };
+    return null;
+  }
+  const SMART = [
+    [/(^|[\s([{\u2014\u2013-])"/g, "$1\u201c"], [/"/g, "\u201d"],
+    [/(\w)'(\w)/g, "$1\u2019$2"], [/(^|[\s([{\u2014\u2013-])'/g, "$1\u2018"], [/'/g, "\u2019"],
+    [/\s--\s/g, " \u2013 "], [/(\d)-(\d)/g, "$1\u2013$2"], [/\.\.\./g, "\u2026"],
+  ];
+  function smarten(node) {
+    const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.parentElement?.closest("pre, code, a") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    const texts = [];
+    while (walk.nextNode()) texts.push(walk.currentNode);
+    for (const t of texts) { let v = t.nodeValue; for (const [re, to] of SMART) v = v.replace(re, to); if (v !== t.nodeValue) t.nodeValue = v; }
+  }
+  // Lines that start with ">" become quote blocks, in the colour of the person quoted, with their name.
+  function quoteify(node, r) {
+    if (!node.querySelector) return node;
+    const kids = [...node.childNodes];
+    const firstP = kids.findIndex((n) => n.nodeName === "P" || n.nodeName === "PRE");
+    const lead = firstP < 0 ? kids : kids.slice(0, firstP);
+    if (lead.some((n) => n.textContent.trim())) { const p = document.createElement("p"); for (const n of lead) p.appendChild(n); node.insertBefore(p, node.firstChild); }
+    let prev = null;
+    for (const p of [...node.children]) {
+      if (p.nodeName !== "P" || !/^\s*(>|&gt;)/.test(p.textContent)) { prev = null; continue; }
+      const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) { const t = walk.currentNode; if (t.nodeValue.trim()) { t.nodeValue = t.nodeValue.replace(/^\s*(>\s*)+/, ""); break; } }
+      const text = p.textContent;
+      const src = quotedFrom(r, text);
+      if (prev && prev._src === (src?.who || null)) { const more = document.createElement("p"); while (p.firstChild) more.appendChild(p.firstChild); prev.querySelector(".h-q-text").appendChild(more); p.remove(); continue; }
+      const inner = document.createElement("p");
+      while (p.firstChild) inner.appendChild(p.firstChild);
+      const bq = h("blockquote", { class: `h-q${src ? "" : " anon"}`, style: src ? qvar(src.who) : null },
+        h("div", { class: "h-q-who" }, src ? (src.story ? `${src.who}, in the story` : `@${src.who}`) : "Quoted"),
+        h("div", { class: "h-q-text" }, inner));
+      if (src?.id) { bq.classList.add("link"); bq.title = "Show the comment this quotes"; bq.dataset.jump = String(src.id); }
+      bq._src = src?.who || null;
+      p.replaceWith(bq);
+      prev = bq;
+    }
+    return node;
+  }
+  const externalLinks = (r) => [...(r.row.querySelectorAll(".commtext a[href]") || [])].map((a) => a.href).filter((u) => /^https?:/i.test(u) && !/^https?:\/\/news\.ycombinator\.com\//i.test(u));
+  // Each linked page gets one preview on the page: in the first comment that links it.
+  const previewOwner = new Map();
+  if (ui.previews !== false) for (const r of rows) for (const u of externalLinks(r).slice(0, 2)) if (!previewOwner.has(u)) previewOwner.set(u, r.id);
+
   function body(r) {
     if (!bodies.has(r.id)) {
       const t = r.row.querySelector(".commtext");
-      bodies.set(r.id, t ? t.cloneNode(true) : h("span", { class: "h-note" }, r.v.bucket === "removed" ? "[dead or deleted]" : ""));
+      const node = t ? t.cloneNode(true) : h("span", { class: "h-note" }, r.v.bucket === "removed" ? "[dead or deleted]" : "");
+      if (t) { quoteify(node, r); smarten(node); }
+      bodies.set(r.id, node);
     }
     const node = bodies.get(r.id).cloneNode(true);
     // Links people open from comments are part of the reading log.
     for (const a of node.querySelectorAll?.("a[href]") || []) {
       if (/^https?:/i.test(a.href)) H.track(a, { kind: "link", id: r.id, title: data.title, page: "thread", tags: r.v.tags, score: r.v.score, bucket: r.v.bucket }, ui);
     }
+    for (const q of node.querySelectorAll?.("blockquote[data-jump]") || []) q.addEventListener("click", (e) => { if (!e.target.closest("a")) jump(Number(q.dataset.jump)); });
     return node;
   }
 
@@ -253,7 +328,8 @@
       const quote = h("div", { class: "h-quote", hidden: true }, clip(textOf(p), 400));
       const b = h("button", { type: "button" }, "show");
       b.addEventListener("click", () => { quote.hidden = !quote.hidden; b.textContent = quote.hidden ? "show" : "hide"; });
-      replyTo = [h("div", { class: "h-replyto" }, h("span", {}, `↳ reply to @${whoOf(p)}:`), h("span", {}, clip(textOf(p), 90)), b), quote];
+      replyTo = [h("div", { class: "h-replyto", style: qvar(whoOf(p)) }, h("span", { class: "h-q-who" }, `↳ @${whoOf(p)}`), h("span", {}, clip(textOf(p), 90)), b), quote];
+      quote.setAttribute("style", qvar(whoOf(p)));
     }
     const dups = (v.dups || []).map((x) => byId.get(x)).filter(Boolean);
     const dupBox = dups.length && openDups.has(r.id) ? h("div", { class: "h-dups" }, dups.map((d) => card(d, "removed", { flat: true }))) : null;
@@ -261,20 +337,21 @@
     const isShut = shut.has(r.id);
     const tog = h("button", { class: "h-tog", type: "button", title: "Collapse or expand this comment (c)", "aria-expanded": String(!isShut) }, isShut ? "+" : "−");
     const indent = opts.flat ? 0 : Math.min(v.depth, 8) * 20;
-    const cls = ["h-c", !opts.flat && v.depth ? "h-indent" : "", opts.rebut ? "h-rebut" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : "", isShut ? "h-collapsed" : ""].join(" ");
+    const cls = ["h-c", v.stretch ? "h-cdisc" : "", !opts.flat && v.depth ? "h-indent" : "", opts.rebut ? "h-rebut" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : "", isShut ? "h-collapsed" : ""].join(" ");
     const el = h("div", { class: cls, id: `hamsa-c-${r.id}`, "data-cid": String(r.id), style: `margin-left:${indent}px;padding-left:${!opts.flat && v.depth ? 10 : opts.rebut ? 10 : 0}px` },
       h("div", { class: "h-card" },
         h("div", { class: "h-chead" },
-          h("div", { class: "who" }, tog, voteBtn(r.row.querySelector(`a#up_${r.id}`)), h("a", { href: `user?id=${encodeURIComponent(who)}` }, h("strong", {}, who)), who === data.author ? h("span", { class: "h-op" }, "OP") : null, h("span", { class: "when" }, age), flags),
+          h("div", { class: "who" }, tog, voteBtn(r.row.querySelector(`a#up_${r.id}`)), h("a", { class: "h-who", href: `user?id=${encodeURIComponent(who)}`, style: qvar(who) }, h("strong", {}, who)), who === data.author ? h("span", { class: "h-op" }, "OP") : null, h("span", { class: "when" }, age), flags),
           H.badge(v.bucket, v.score)),
         replyTo,
         h("div", { class: "h-preview", title: "Expand" }, clip(textOf(r), 200)),
         h("div", { class: "h-cwrap" }, h("div", {},
           h("div", { class: "h-cbody" }, body(r)),
+          mode === "removed" || v.bucket === "removed" ? null : externalLinks(r).filter((u) => previewOwner.get(u) === r.id).slice(0, 2).map((u) => H.previewSlot(u, { ui, page: "thread", threadId: id, threadTitle: data.title, author: who })),
           v.tags.length ? h("div", { class: "h-row", style: "margin-bottom:6px" }, tagButtons(v.tags)) : null,
           why,
           h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold, dupBtn, h("span", { class: "h-grow" }),
-            H.thumbs({ id: r.id, kind: "comment", title: clip(textOf(r), 160), tags: v.tags }, prefState(r.id))),
+            H.thumbs({ id: r.id, kind: "comment", title: clip(textOf(r), 160), excerpt: textOf(r).slice(0, 300), author: who, threadId: id, threadTitle: data.title, url: `https://news.ycombinator.com/item?id=${r.id}`, links: externalLinks(r), tags: v.tags }, prefState(r.id))),
           dupBox))));
     tog.addEventListener("click", () => toggle(r, el));
     el.querySelector(".h-preview").addEventListener("click", () => toggle(r, el));
@@ -295,7 +372,7 @@
   const prefState = (cid) => { if (!prefStates.has(cid)) prefStates.set(cid, { pref: data.prefs?.[cid] || null }); return prefStates.get(cid); };
   const bestKey = (r) => 0.7 * r.v.score + 0.3 * (r.v.quality || 0);
   function survivors() {
-    return rows.filter((r) => !r.v.dupOf && r.v.bucket !== "removed" && (show[r.v.bucket] || isProtected(r.v) || forced.has(r.id)));
+    return rows.filter((r) => !r.v.dupOf && r.v.bucket !== "removed" && inTopic(r) && (show[r.v.bucket] || isProtected(r.v) || forced.has(r.id)));
   }
   function survivorsList() {
     const surv = survivors();
@@ -314,7 +391,7 @@
       out.push(card(r, "normal", { flat: true, replyTo: r.v.parent ? byPath.get(r.v.parent) : null }));
       for (const rb of rebutsOf.get(r.id) || []) out.push(card(rb, "normal", { flat: true, rebut: true, replyTo: r }));
     }
-    const rest = rows.length - surv.length;
+    const rest = rows.filter(inTopic).length - surv.length;
     if (rest) out.push(h("div", { class: "h-fold" }, h("span", {}, `${rest} more ${rest === 1 ? "comment is" : "comments are"} not in this view: below your interest floor, removed, or near-duplicates folded under the comment they repeat.`), h("button", { class: "h-btn", type: "button", onclick: () => setView("tree") }, "See them in the tree")));
     return out.length ? out : [h("div", { class: "h-note" }, "No comments yet.")];
   }
@@ -327,9 +404,16 @@
     let group = [];
     let tossedHidden = 0;
     const flush = () => { if (group.length) { if (hideTossed) tossedHidden += group.length; else out.push(foldRow(group)); } group = []; };
+    let lastSub = null;
     for (const r of rows) {
       const p = r.v.path;
+      if (!inTopic(r)) continue;
       if (hiddenByCollapse(p)) continue;
+      if (r.v.depth === 0 && !topic && SUB.groups.length) {
+        const g = subOf(r);
+        if (g && g !== lastSub && g !== "other") { flush(); out.push(h("div", { class: "h-branch" }, h("span", { class: "h-label" }, "Sub-discussion"), h("strong", {}, subLabel.get(g)))); }
+        lastSub = g;
+      }
       if (visible.has(p)) { flush(); out.push(card(r, forced.has(r.id) && !show[r.v.bucket] && !isProtected(r.v) ? "removed" : "normal")); }
       else if (context.has(p)) { flush(); out.push(card(r, "context")); }
       else group.push(r);
@@ -342,7 +426,25 @@
   async function setView(v) { view = v; cursor = -1; draw(); await H.send({ type: "set-ui", patch: { threadView: v } }).catch(() => {}); }
   async function setTossed(on) { hideTossed = on; draw(); await H.send({ type: "set-ui", patch: { collapseTossed: on } }).catch(() => {}); }
 
+  // Comments Discover found: off your usual topics, and worth reading by HN's own signals.
+  function drawStrip() {
+    const picks = rows.filter((r) => r.v.stretch && inTopic(r));
+    if (!picks.length) { discStrip.replaceChildren(); return; }
+    discStrip.replaceChildren(h("section", { class: "h-dstrip" },
+      h("div", { class: "h-dstrip-head" }, H.icon("compass", 16), h("strong", {}, "You wouldn't have found these"), h("span", { class: "h-note" }, "Outside your usual topics, and worth reading by HN's own signals.")),
+      picks.map((r) => h("button", { class: "h-dpick", type: "button", onclick: () => jump(r.id) },
+        h("span", { class: "h-who", style: qvar(whoOf(r)) }, whoOf(r)),
+        h("span", { class: "h-dtext" }, clip(textOf(r), 220)),
+        h("span", { class: "h-note" }, (r.v.reasons || []).filter((x) => x.kind === "discover" && x.points).map((x) => x.label).slice(0, 2).join(" · "))))));
+  }
+  function drawSubs() {
+    if (!SUB.groups.length) { subChips.replaceChildren(); return; }
+    const chip = (gid, text) => { const c = h("button", { class: "h-chip sub", type: "button", "aria-pressed": String(topic === gid) }, text); c.addEventListener("click", () => { topic = gid; cursor = -1; draw(); }); return c; };
+    subChips.replaceChildren(h("span", { class: "h-label" }, "Sub-discussions"), chip(null, "All"), ...SUB.groups.map((g) => chip(g.id, `${g.label} · ${g.count}`)));
+  }
   function draw() {
+    drawSubs();
+    drawStrip();
     list.replaceChildren(...(view === "survivors" ? survivorsList() : treeList()));
     const counts = { keep: 0, stretch: 0, maybe: 0, toss: 0, removed: 0 };
     for (const r of rows) counts[r.v.bucket]++;
@@ -383,6 +485,7 @@
 
   function jump(cid) {
     if (!cid || !V[cid]) return;
+    if (topic && byId.get(cid) && !inTopic(byId.get(cid))) topic = null;
     forced.add(cid);
     if (view === "survivors" && (V[cid].bucket === "removed" || V[cid].dupOf)) view = "tree";
     for (const a of ancestors(V[cid].path || "")) collapsed.delete(a);
@@ -400,7 +503,7 @@
     const f = data.funnel, pct = (n) => `${Math.round((n / Math.max(1, f.comments)) * 100)}%`;
     const stage = (label, n, cls) => { const b = h("span", { class: `h-bar ${cls}` }, h("i")); b.firstChild.style.width = pct(n); return h("div", { class: "h-funnel" }, h("div", { class: "h-kv" }, h("span", {}, label), h("b", {}, String(n))), b); };
     const d = data.dropped;
-    side.replaceChildren(
+    side.replaceChildren(...[
       h("section", { class: "h-panel" }, h("div", { class: "h-label" }, "What reaches the model"),
         stage("Comments in thread", f.comments, ""), stage("After crust removal", f.afterCrust, ""), stage("After tag match", f.afterTags, "tags"), stage("Sent to the model", f.sent, "sent"),
         h("div", { class: "h-note" }, data.graphReady ? "Comments below your interest floor stay on the page but are not sent." : "No interests synced, so nothing is held back by relevance.")),
@@ -410,11 +513,14 @@
         HELD.some((k) => d[k]) ? [h("div", { class: "h-sep" }), h("div", { class: "h-label" }, "Held back from the model, still shown"),
           HELD.filter((k) => d[k]).map((k) => h("div", { class: "h-kv" }, h("span", {}, RULES[k]), h("b", {}, String(d[k]))))] : null,
         h("div", { class: "h-sep" }), h("div", { class: "h-note" }, "Rebuttals, and the comments they answer, are never cut. Every cut is logged and can be shown from the fold where it happened.")),
+      ui.previews !== false && !ui.previewAllowed ? h("section", { class: "h-panel" }, h("div", { class: "h-label" }, "Link previews"),
+        h("div", { class: "h-note" }, "See a card with the title, picture and summary of every linked page. It needs your permission to read the pages links point to."),
+        h("button", { class: "h-btn primary", style: "align-self:flex-start", onclick: () => H.send({ type: "open-settings", section: "s-look" }) }, "Turn on in settings")) : null,
       h("section", { class: "h-panel" }, h("div", { class: "h-label" }, "Score on every comment"),
-        h("div", { class: "h-note" }, `Each comment carries its 0 to 1 score, the reasons behind it, its bucket and the rules version (v${data.rules}), so a re-score later needs no new fetching. Depth never lowers a score.`)));
+        h("div", { class: "h-note" }, `Each comment carries its 0 to 1 score, the reasons behind it, its bucket and the rules version (v${data.rules}), so a re-score later needs no new fetching. Depth never lowers a score.`))].filter(Boolean));
   }
 
-  status.replaceWith(head, sumCard, chips, controls, list);
+  status.replaceWith(head, sumCard, chips, subChips, controls, discStrip, list);
   current ? drawSumResult() : drawSumIdle();
   draw();
   drawSide();

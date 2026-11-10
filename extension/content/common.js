@@ -271,5 +271,62 @@
     return [mk("like", "Like: more like this"), mk("dislike", "Dislike: less like this")];
   }
 
-  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, thumbs, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
+  // ---- link previews: a card for a link, fetched by the background page when it scrolls near ----
+  const linkId = (url) => "link:" + String(url).replace(/#.*$/, "").replace(/\/$/, "");
+  const pv = { queue: [], busy: 0, blocked: false, off: false, io: null, ctx: {} };
+  function pvObserver() {
+    if (pv.io || typeof IntersectionObserver === "undefined") return pv.io;
+    pv.io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { pv.io.unobserve(e.target); pv.queue.push(e.target); }
+      pvPump();
+    }, { rootMargin: "600px 0px" });
+    return pv.io;
+  }
+  function pvPump() {
+    while (pv.busy < 4 && pv.queue.length) {
+      const batch = pv.queue.splice(0, 4);
+      pv.busy++;
+      send({ type: "previews", urls: batch.map((el) => el.dataset.url) }, 1).then((r) => {
+        if (r.needPermission) { pv.blocked = true; for (const el of [...batch, ...pv.queue]) el.remove(); pv.queue = []; document.dispatchEvent(new CustomEvent("hamsa-previews-blocked")); return; }
+        if (r.off) { pv.off = true; for (const el of [...batch, ...pv.queue]) el.remove(); pv.queue = []; return; }
+        for (const el of batch) drawPreview(el, r.previews?.[el.dataset.url]);
+      }).catch(() => { for (const el of batch) el.remove(); }).finally(() => { pv.busy--; pvPump(); });
+    }
+  }
+  function previewSlot(url, ctx = {}) {
+    if (pv.blocked || pv.off || !/^https?:/i.test(url || "")) return null;
+    const el = h("div", { class: "h-pv loading", "data-url": url, "aria-busy": "true" }, h("div", { class: "h-pv-skel" }));
+    el._ctx = ctx;
+    const io = pvObserver();
+    if (io) io.observe(el); else { pv.queue.push(el); pvPump(); }
+    return el;
+  }
+  function drawPreview(el, p) {
+    if (!p || p.error || p.skip || (!p.title && !p.description && !p.image)) { el.remove(); return; }
+    const ctx = el._ctx || {};
+    const url = el.dataset.url;
+    const host = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+    const date = p.published ? (() => { const d = new Date(p.published); return isNaN(d) ? null : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); })() : null;
+    const KIND = { pdf: "PDF", paper: "Paper", video: "Video", image: "Image" };
+    const titleA = h("a", { class: "h-pv-title", href: url, rel: "noopener noreferrer" }, p.title || host);
+    if (ctx.ui) track(titleA, { kind: "link", url, title: p.title || ctx.title || url, domain: host, page: ctx.page || "thread" }, ctx.ui);
+    const img = p.image ? h("img", { class: "h-pv-img", src: p.image, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" }) : null;
+    img?.addEventListener("error", () => img.remove());
+    const fav = p.icon ? h("img", { class: "h-pv-ico", src: p.icon, alt: "", width: "14", height: "14", referrerpolicy: "no-referrer" }) : null;
+    fav?.addEventListener("error", () => fav.remove());
+    const item = { id: linkId(url), kind: "link", title: p.title || ctx.title || url, url, domain: host, site: p.site, threadId: ctx.threadId, threadTitle: ctx.threadTitle, excerpt: p.description, author: ctx.author };
+    const state = { pref: p.pref || null };
+    el.classList.remove("loading");
+    el.removeAttribute("aria-busy");
+    if (img) el.classList.add("has-img");
+    el.replaceChildren(...[
+      img ? h("a", { class: "h-pv-media", href: url, rel: "noopener noreferrer", tabindex: "-1", "aria-hidden": "true" }, img) : null,
+      h("div", { class: "h-pv-body" },
+        h("div", { class: "h-pv-site" }, fav, h("span", {}, p.site || host), KIND[p.kind] ? h("span", { class: "h-pv-kind" }, KIND[p.kind]) : null, date ? h("span", {}, `· ${date}`) : null, p.author ? h("span", {}, `· ${p.author}`) : null),
+        titleA,
+        p.description ? h("p", { class: "h-pv-desc" }, p.description) : null),
+      h("div", { class: "h-pv-act" }, thumbs(item, state))].filter(Boolean));
+  }
+
+  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, thumbs, previewSlot, linkId, pv, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
 })();

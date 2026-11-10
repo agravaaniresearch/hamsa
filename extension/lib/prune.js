@@ -186,16 +186,33 @@ export function prune(thread, userCfg = {}, relModel = null) {
     }
   }
 
-  // 9. Stretch picks: substantial top-level comments outside your tags. Then the interest floor:
-  //    with a tag graph, comments that match none of your interests stay on the page but do not reach the model.
+  // 9. Discover in the thread: substantial comments outside your usual topics, preferring first-hand
+  //    experience, respected authors and comments HN readers rank high. They are kept and sent.
   if (relModel) {
-    const tagless = (c) => !(c.verdict.reasons || []).some((r) => r.kind === 'tag' || r.kind === 'near');
-    const cands = live.filter((c) => !c.dropped && !c.parent_path && tagless(c) && c.words >= 60 && isEvidence(c) && c.score >= 800)
-      .sort((a, b) => b.score - a.score).slice(0, cfg.stretchComments ?? 3);
-    for (const c of cands) {
+    const FIRST_HAND = /\b(i (work|worked|used to work)( on| at| for)?|i('ve| have) (built|shipped|run|used|maintained|written)|at my (company|job|work|employer|lab|hospital)|in my experience|we (built|run|shipped|use|used|switched)|i('m| am) (a|an) [a-z]+ (engineer|doctor|researcher|developer|scientist|lawyer|pilot))\b/i;
+    const offTopic = (c) => !(c.verdict.reasons || []).some((r) => r.kind === 'tag' || r.kind === 'near' || r.kind === 'context' || r.kind === 'inherit');
+    const cands = [];
+    for (const c of live) {
+      if (c.dropped || c.depth > 2 || c.words < 40 || !offTopic(c)) continue;
+      const k = cfg.karma && c.author ? cfg.karma[c.author] : null;
+      const karmaNorm = k ? Math.min(1, Math.log10(1 + k) / 5) : 0;
+      const replyNorm = Math.min(1, Math.log2(1 + Math.max(0, c.subtree_size - 1)) / 5);
+      const firstHand = FIRST_HAND.test(c.text);
+      const q = 0.35 * (c.score / 1000) + 0.25 * karmaNorm + 0.15 * replyNorm + 0.1 * (isEvidence(c) ? 1 : 0) + 0.15 * (firstHand ? 1 : 0);
+      if (q >= 0.4) cands.push({ c, q, k, firstHand, replies: c.subtree_size - 1 });
+    }
+    cands.sort((a, b) => b.q - a.q);
+    for (const { c, q, k, firstHand, replies } of cands.slice(0, cfg.stretchComments ?? scoring.stretchMax ?? 3)) {
       c.stretch = true;
-      c.verdict.bucket = 'stretch';
-      c.verdict.reasons.unshift({ kind: 'stretch', label: 'Stretch pick: none of your tags, but substantial and ranked high', points: 0 });
+      const reasons = [
+        { kind: 'discover', label: 'Off your usual topics', points: 0 },
+        firstHand ? { kind: 'discover', label: 'First-hand experience', points: 0.15 } : null,
+        k >= 1000 ? { kind: 'discover', label: `Respected author (karma ${k >= 10000 ? Math.round(k / 1000) + 'k' : k})`, points: Math.round(25 * Math.min(1, Math.log10(1 + k) / 5)) / 100 } : null,
+        c.score >= 700 ? { kind: 'discover', label: 'Ranked high by HN readers', points: Math.round(35 * c.score / 1000) / 100 } : null,
+        replies >= 3 ? { kind: 'discover', label: `Drew ${replies} replies`, points: 0.05 } : null,
+        isEvidence(c) ? { kind: 'discover', label: 'Carries a link, a number or code', points: 0.1 } : null,
+      ].filter(Boolean);
+      c.verdict = { ...c.verdict, bucket: 'stretch', score: Math.min(1, Math.round(q * 100) / 100), total: Math.round(q * 100) / 100, reasons, discover: true };
     }
     if (cfg.gate !== false) {
       for (const c of live) {

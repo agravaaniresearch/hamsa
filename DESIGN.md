@@ -14,14 +14,16 @@ Hamsa is the swan said to separate milk from water (nira-kshira-viveka). It sepa
 
 | Level | What happens | Model |
 |---|---|---|
-| Front page | Pages 1 to 5 merged into one list; every story scored on its title, site and your favourites; blocklist applied; Discover first, then keep and maybe; toss hidden behind a chip | none |
+| Front page | Pages 1 to 5 merged into one list; every story scored on its title, site and your favourites; blocklist and flame-war filter applied; stories grouped by topic; Discover first, then keep and maybe; toss hidden behind a chip | none |
 | Thread | Every page of the thread read; crust removed (dead, downvoted, abusive, flame chains, meta, quote-only, short); comments scored against your tags; off-topic comments held back; the tree redrawn with folds that say what was hidden and why | none |
 | Summary | One call with your key on the comments that passed; tokens sent and received, and the cost, shown on the card and added to today's total in the header | on request |
-| Digest | Once a day: the front pages scored and grouped into topics, Discover and keep first | none |
+| Digest | Your likes alone: what is due for another look, today's stories that resemble what you liked, and every like by topic | none |
 
 ## Reading a thread
 
 The default is to scroll through what survives: keep, discover and maybe comments in one column, best first, each reply saying what it answers, and each rebuttal sitting directly under the comment it answers. Every comment folds to a line; j and k move, c collapses. The tree view is there to see the thread in place, with folds that say what was hidden and why, or with the tossed folds collapsed away.
+
+Threads read like a conversation: every person keeps one colour, quotes become blocks in the colour of the person quoted, and branches on the same subject are grouped into sub-discussions you can read one at a time. Links show a preview card, so you know what a link is before you leave the page.
 
 ## Buckets
 
@@ -43,13 +45,17 @@ An open JSON file anyone can edit, share and import. Groups switch on and off as
 
 Opening a story, a thread or a link is the cheapest honest signal there is. Hamsa remembers it in the browser, uses it straight away (sites you open, titles like ones you opened, tags you click), and exports it with everything you were shown as one JSON line per story, so a small local model can later be tuned on your own choices.
 
+## Remembering what you liked
+
+A like is a small decision that something was worth keeping. The digest is built from those decisions alone, and brings each one back on a widening gap (1, 3, 7, 16, 35, 90, 180 days), the way spaced repetition keeps a fact, so what you found useful is still with you when it matters. Each like keeps its context: the thread, the author, an excerpt and the links in it.
+
 ## Taste, and taking it with you
 
 Thumbs on any story or comment, and your own HN votes, teach Hamsa your taste in this browser. Everything you set and taught it is one open JSON format: a file you can keep, Firefox Sync for every Firefox you use, or a private GitHub gist for anywhere else. Keys stay out unless you put them in.
 
 ## Interface
 
-One extension owns both the reading layout and the filtering (replacing Modern for Hacker News and the earlier sidebar), so selectors stay stable. The header keeps HN's navigation and adds today's token total, the digest, the theme button (Auto, Light, Dark, as in Parshva), the original HN view and settings. The palette is warm paper and rust, with no blue; dark comes in warm charcoal, neutral grey and black. Five bundled fonts, text size, width, justified text and density follow Modern for Hacker News, and a skin themes the HN pages Hamsa does not redraw.
+One extension owns both the reading layout and the filtering (replacing Modern for Hacker News and the earlier sidebar), so selectors stay stable. The header keeps HN's navigation and adds today's token total, the digest, the theme button (Auto, Light, Dark, as in Parshva), the original HN view and settings. The palette is warm paper and rust, with no blue; dark comes in warm charcoal, neutral grey and black. Seven bundled fonts with ready pairings, text size, width, justified text and density follow Modern for Hacker News, and a skin themes the HN pages Hamsa does not redraw.
 
 ## Open questions
 
@@ -57,5 +63,7 @@ One extension owns both the reading layout and the filtering (replacing Modern f
 - Rebuttal detection is keyword-based and will miss polite disagreement.
 - Karma and HN position stand in for comment votes, which HN does not publish.
 - HN favourites and upvotes are read from HN pages, which can change without notice.
+- Quote attribution searches only the comments above a quote, and sub-discussions are grouped by shared words, so both miss paraphrase.
+- Link previews depend on what each site declares about itself; some sites block fetches or declare nothing.
 
 See SCHEMA.md for every rule, weight and file format.

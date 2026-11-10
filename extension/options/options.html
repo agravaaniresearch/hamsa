@@ -113,10 +113,12 @@
           </div>
           <div class="grid">
             <label class="field"><span>Dark style</span><select id="darkStyle"><option value="warm">Warm charcoal</option><option value="neutral">Neutral grey</option><option value="black">Black (good for OLED screens)</option></select></label>
+            <label class="field"><span>Font pairing</span>
+              <select id="fontPreset"><option value="">Choose a pairing…</option><option value="editorial">Editorial: Source Serif titles, Source Sans text</option><option value="classic">Classic: Literata titles, Inter text</option><option value="modern">Modern: Inter throughout</option><option value="bookish">Bookish: Literata throughout</option><option value="easy">Easy reading: Atkinson throughout</option><option value="plex">Technical: Plex Sans titles, Plex Sans text</option></select></label>
             <label class="field"><span>Text font</span>
-              <select id="font"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata (serif, for long reading)</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible (easiest to read)</option><option value="plex-mono">IBM Plex Mono</option></select></label>
+              <select id="font"><optgroup label="Serif"><option value="literata">Literata (for long reading)</option><option value="source-serif">Source Serif 4</option></optgroup><optgroup label="Sans serif"><option value="system">System</option><option value="inter">Inter</option><option value="source-sans">Source Sans 3</option><option value="plex-sans">IBM Plex Sans</option><option value="atkinson">Atkinson Hyperlegible (easiest to read)</option></optgroup><optgroup label="Monospace"><option value="plex-mono">IBM Plex Mono</option></optgroup></select></label>
             <label class="field"><span>Title font</span>
-              <select id="titleFont"><option value="system">System</option><option value="inter">Inter</option><option value="literata">Literata</option><option value="source-serif">Source Serif</option><option value="atkinson">Atkinson Hyperlegible</option><option value="plex-mono">IBM Plex Mono</option></select></label>
+              <select id="titleFont"><optgroup label="Serif"><option value="literata">Literata</option><option value="source-serif">Source Serif 4</option></optgroup><optgroup label="Sans serif"><option value="system">System</option><option value="inter">Inter</option><option value="source-sans">Source Sans 3</option><option value="plex-sans">IBM Plex Sans</option><option value="atkinson">Atkinson Hyperlegible</option></optgroup><optgroup label="Monospace"><option value="plex-mono">IBM Plex Mono</option></optgroup></select></label>
             <label class="field"><span>Text size</span><select id="textSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option><option value="xl">Extra large</option></select></label>
             <label class="field"><span>Page width</span><select id="width"><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide</option></select></label>
             <label class="field"><span>Comment text</span><select id="justify"><option value="off">Ragged right</option><option value="on">Justified</option></select></label>
@@ -124,6 +126,12 @@
             <label class="field"><span>Other HN pages</span><select id="skin"><option value="on">Themed to match</option><option value="off">Plain HN</option></select></label>
           </div>
           <div id="font-sample" class="sample"></div>
+        </div>
+        <div class="card">
+          <h3>Link previews</h3>
+          <div class="field-row"><div><strong>Show a preview card for links</strong><small id="pv-status">For the story, links inside comments, and Discover stories: the page's title, picture and summary.</small></div><label class="switch"><input type="checkbox" id="pv-on"><span></span></label></div>
+          <div class="field-row"><div><strong>Show the pictures</strong><small>Off shows text only. Pictures load without telling the site where you came from.</small></div><label class="switch"><input type="checkbox" id="pv-img"><span></span></label></div>
+          <p class="hint">To read a linked page, Firefox asks you once to let Hamsa read all sites. Hamsa only fetches the first part of a page a link points to, with no cookies, and keeps what it found for two weeks. <button id="pv-clear" class="linkbtn" type="button">Clear saved previews</button></p>
         </div>
         <div class="card">
           <h3>How pages behave</h3>
@@ -236,6 +244,16 @@
           </div>
           <p class="hint">The mark is <code>1 − e^(−2 × total ÷ ceiling)</code>, where the total adds up every reason shown under "Why this score".</p>
           <div class="row"><button id="sc-reset" class="secondary" type="button">Reset to starting values</button></div>
+        </div>
+        <div class="card">
+          <div class="field-row"><div><strong>Leave out flame wars</strong><small>A story with many comments and few points is usually an argument. It goes to toss, never to Discover. A story you liked always stays.</small></div><label class="switch"><input type="checkbox" id="sc-flameFilter"><span></span></label></div>
+          <div class="grid">
+            <label class="field"><span>Flame war: at least this many comments</span><input id="sc-flameMinComments" type="number" min="5" max="1000" step="5"></label>
+            <label class="field"><span>…and this many comments per point</span><input id="sc-flameRatio" type="number" min="0.5" max="10" step="0.25"></label>
+            <label class="field"><span>Hide stories under this many points</span><input id="sc-minPoints" type="number" min="0" max="1000" step="5"></label>
+            <label class="field"><span>Hide stories under this many comments</span><input id="sc-minComments" type="number" min="0" max="1000" step="5"></label>
+          </div>
+          <p class="hint">0 switches a threshold off. Discover is never held back by the points and comments thresholds, because new stories start small.</p>
         </div>
       </section>
 

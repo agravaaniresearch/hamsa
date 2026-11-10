@@ -50,7 +50,7 @@
       if (vote.classList.contains("on")) return;
       try { await fetch(new URL(s.voteHref, location.href).href, { credentials: "include" }); vote.classList.add("on"); H.toast("Upvoted on HN"); } catch { H.toast("The vote did not go through."); }
     });
-    const thumbs = H.thumbs({ id: s.id, kind: "story", title: s.title, domain: s.domain, tags: v.tags }, v, (next) => {
+    const thumbs = H.thumbs({ id: s.id, kind: "story", title: s.title, domain: s.domain, url: s.url, threadId: s.id, points: s.points, author: s.by, tags: v.tags }, v, (next) => {
       const sc = data.scoring;
       if (next === "dislike") { v._was = v._was || v.bucket; v.bucket = "toss"; }
       else if (next === "like") { v._was = v._was || v.bucket; v.bucket = v.bucket === "stretch" ? "stretch" : "keep"; }
@@ -78,7 +78,9 @@
     const dups = (v.dups || []).map((id) => byId.get(id)).filter(Boolean);
     const also = dups.length ? h("div", { class: "h-also" }, h("span", {}, `Also submitted ${dups.length === 1 ? "once more" : `${dups.length} more times`}:`),
       dups.map(({ s: d }) => h("span", {}, H.track(h("a", { href: `item?id=${d.id}` }, d.title), { kind: "thread", id: d.id, title: d.title, url: `https://news.ycombinator.com/item?id=${d.id}`, domain: d.domain, page: "front" }, ui), ` · ${d.points} points · ${d.comments} comments${d.domain && d.domain !== s.domain ? ` · ${d.domain}` : ""}`))) : null;
+    const preview = v.bucket === "stretch" && ui.previews !== false && s.external && s.url ? H.previewSlot(s.url, { ui, page: "front", title: s.title, threadId: s.id, threadTitle: s.title }) : null;
     return h("article", { class: `h-card${v.bucket === "toss" ? " h-dim" : ""}${v.bucket === "stretch" ? " h-stretch-card" : ""}`, id: `hamsa-s-${s.id}` },
+      v.bucket === "stretch" ? h("div", { class: "h-ribbon" }, H.icon("compass", 13), "Discover") : null,
       h("div", { class: "h-story" },
         h("div", { class: "h-rank", title: "Rank on Hacker News" }, s.rank ? String(s.rank) : ""),
         h("div", { class: "h-sbody" },
@@ -98,10 +100,51 @@
             v.blocked ? h("span", { class: "h-flag plain" }, `blocked: ${v.blocked.group}`) : null,
             v.bucket === "stretch" ? h("span", { class: "h-flag stretch" }, v.discover ? "new to you" : "outside your tags") : null,
             v.clusterOf ? h("span", { class: "h-flag plain" }, "same topic as a keep") : null,
+            v.flame ? h("span", { class: "h-flag plain", title: "Many comments on few points usually means an argument" }, "flame war") : null,
+            v.belowThreshold && !v.flame ? h("span", { class: "h-flag plain" }, "below your threshold") : null,
+            v.topic && v.topic.size > 1 && v.topic.status === "returning" ? h("span", { class: "h-flag plain", title: `On the front page for ${v.topic.days} days` }, `returning topic · day ${v.topic.days}`) : null,
             more > 0 ? h("span", { class: "h-note" }, `+${more} more signal${more > 1 ? "s" : ""}`) : null),
           also,
+          preview,
           why,
           h("div", { class: "h-row" }, whyBtn, comments ? H.track(h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread"), entry("thread"), ui) : null, bgThread, s.external ? bgStory : null, thumbs, dismiss))));
+  }
+
+  // ---- topics: stories on one subject sit together, the best one in full and the rest as rows ----
+  function grouped(part) {
+    const seen = new Set(), out = [];
+    for (const it of part) {
+      if (seen.has(it.s.id)) continue;
+      const t = it.v.topic;
+      const mates = t && t.size > 1 ? part.filter((x) => x.v.topic?.id === t.id && x.s.id !== it.s.id && !seen.has(x.s.id)) : [];
+      seen.add(it.s.id);
+      if (!mates.length) { out.push(storyCard(it)); continue; }
+      for (const m of mates) seen.add(m.s.id);
+      const status = t.status === "new" ? "new today" : `returning · day ${t.days}`;
+      out.push(h("div", { class: `h-topic${t.status === "new" ? " new" : ""}` },
+        h("div", { class: "h-topic-head" }, h("span", { class: "h-label" }, "Topic"), h("strong", {}, t.label), h("span", { class: "h-note" }, `${mates.length + 1} stories · ${status}`)),
+        storyCard(it),
+        mates.map(topicRow)));
+    }
+    return out;
+  }
+  function topicRow(it) {
+    const { s, v } = it;
+    const full = h("div", { hidden: true });
+    const open = h("button", { class: "h-btn ghost", type: "button", "aria-expanded": "false" }, "Details");
+    open.addEventListener("click", () => {
+      if (!full.firstChild) full.append(storyCard(it));
+      full.hidden = !full.hidden; open.setAttribute("aria-expanded", String(!full.hidden)); open.textContent = full.hidden ? "Details" : "Hide";
+    });
+    const entry = { kind: "story", id: s.id, title: s.title, url: s.url, domain: s.domain, tags: v.tags, score: v.score, bucket: v.bucket, page: "front" };
+    return h("div", { class: "h-trow", id: `hamsa-s-${s.id}` },
+      h("div", { class: "h-trow-line" },
+        H.bar(v.bucket, v.score),
+        H.track(h("a", { class: "h-ttitle", href: s.url }, s.title), entry, ui),
+        h("span", { class: "h-note" }, [s.domain, s.points ? `${s.points} points` : null].filter(Boolean).join(" · ")),
+        s.kind === "job" ? null : H.track(h("a", { class: "h-note", href: `item?id=${s.id}` }, `${s.comments || 0} comments`), { ...entry, kind: "thread", url: `https://news.ycombinator.com/item?id=${s.id}` }, ui),
+        open),
+      full);
   }
 
   // ---- list, chips and panels ----
@@ -126,7 +169,7 @@
         const part = visible.filter(({ v }) => v.bucket === b);
         if (!part.length) continue;
         out.push(h("div", { class: `h-section ${b}` }, b === "stretch" ? H.icon("compass", 18) : null, h("strong", {}, `${SECTION[b][0]} · ${part.length}`), h("span", {}, SECTION[b][1])));
-        out.push(...part.map(storyCard));
+        out.push(...grouped(part));
       }
     } else out.push(...visible.map(storyCard));
     list.replaceChildren(...(out.length ? out : [h("div", { class: "h-note" }, "Nothing in the buckets you chose. Switch on Maybe or Toss above.")]));

@@ -9,3 +9,7 @@
 @font-face { font-family: "Hamsa Atkinson"; font-weight: 600 700; font-display: swap; src: url("atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Hamsa Plex Mono"; font-weight: 400; font-display: swap; src: url("ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Hamsa Plex Mono"; font-weight: 600 700; font-display: swap; src: url("ibm-plex-mono-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Source Sans"; font-weight: 400; font-display: swap; src: url("source-sans-3-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Source Sans"; font-weight: 600 700; font-display: swap; src: url("source-sans-3-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Plex Sans"; font-weight: 400; font-display: swap; src: url("ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Hamsa Plex Sans"; font-weight: 600 700; font-display: swap; src: url("ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }

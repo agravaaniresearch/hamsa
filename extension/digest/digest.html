@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hamsa digest</title>
   <script src="../shared/theme-init.js"></script>
+  <link rel="stylesheet" href="../fonts/fonts.css">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="digest.css">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="https://news.ycombinator.com/news"><img src="../icons/icon-48.png" alt="" width="24" height="24"> Hamsa</a>
-    <span class="sub">Morning digest</span>
+    <span class="sub">Digest of what you liked</span>
     <span class="grow"></span>
     <span id="usage" class="pill" title="Tokens your keys used today"></span>
     <button id="btn-theme" class="icon" type="button" title="Theme: Auto" aria-label="Theme: Auto"></button>
@@ -23,11 +24,10 @@
     <h1 id="title">Digest</h1>
     <p id="lede" class="lede"></p>
     <div class="row">
-      <button id="btn-rebuild" class="secondary" type="button">Rebuild now</button>
+      <button id="btn-rebuild" class="secondary" type="button">Read today's front page again</button>
       <a class="secondary btnlink" href="https://news.ycombinator.com/news">Open the filtered front page</a>
-      <label class="check"><input id="show-maybe" type="checkbox"> Include maybe</label>
     </div>
-    <div id="clusters" class="clusters" aria-live="polite"></div>
+    <div id="body" aria-live="polite"></div>
     <p class="lede small" id="foot"></p>
   </main>
   <script type="module" src="digest.js"></script>

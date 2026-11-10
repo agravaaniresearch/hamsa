@@ -44,6 +44,9 @@ export const DEFAULT_SETTINGS = {
   density: "comfortable",  // comfortable | compact
   darkStyle: "warm",       // warm | neutral | black
   syncFirefox: false,      // keep settings, likes and blocklist in step through Firefox Sync
+  previews: true,          // link preview cards (needs the optional all-sites permission)
+  previewImages: true,     // show the image a page declares in its preview
+  quoteColours: "bright",  // colours for quotes and names in threads
   skin: true,              // theme the plain HN pages Hamsa does not redraw (profiles, replies, Original view)
   font: "system",          // body font: system | inter | literata | source-serif | atkinson | plex-mono
   budgetTokens: 30000,

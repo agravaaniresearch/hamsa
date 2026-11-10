@@ -197,3 +197,5 @@ details.card > summary { font-weight: 600; color: var(--text); margin: 0; }
 .toast.warn { border-color: var(--warn); } .toast.warn .ticon { background: var(--warn); }
 .toast.bad { border-color: var(--danger); background: var(--danger-bg); } .toast.bad .ticon { background: var(--danger); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .switch span, .switch span::after { transition: none; } }
+
+.linkbtn { border: 0; background: none; padding: 0; color: var(--accent, #b4531a); text-decoration: underline; cursor: pointer; font: inherit; }

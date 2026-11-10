@@ -2,6 +2,7 @@
 // an HTML parser (DOMParser in the extension, linkedom in tests).
 import { parseThread, nextPageHref } from "./parse.js";
 import { prune } from "./prune.js";
+import { subDiscussions } from "./subtopics.js";
 import { renderThreadText } from "./render.js";
 import { estTokens } from "./config.js";
 
@@ -52,7 +53,8 @@ export function prepare(thread, graph, cfg = {}) {
   const abs = result.kept.map((c) => c.relevance?.abs ?? 0).sort((a, b) => b - a);
   const strong = abs.slice(0, 10);
   const threadRelevance = strong.length ? strong.reduce((s, v) => s + v, 0) / strong.length : 0;
-  return { result, threadText, tokens, threadRelevance, funnel: funnel(result.stats) };
+  const subtopics = subDiscussions(thread.comments);
+  return { result, threadText, tokens, threadRelevance, funnel: funnel(result.stats), subtopics };
 }
 
 // 689 in -> after crust -> after tag match -> sent. The crust is everything except the interest floor and the budget.
@@ -75,6 +77,7 @@ export function verdicts(thread) {
       rebuttal: !!v.rebuttal, answered: !!v.answered, sent: !!v.sent, stretch: !!c.stretch,
       quality: v.quality ?? 0, parent: c.parent_path || null, dupOf: v.dupOf || null, dups: v.dups || [],
       tags: (v.reasons || []).filter((r) => r.kind === "tag").map((r) => r.tag),
+      discover: !!v.discover,
     };
   }
   return out;

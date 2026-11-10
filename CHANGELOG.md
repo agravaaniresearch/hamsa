@@ -2,6 +2,46 @@
 
 All notable changes to Hamsa. Versions follow the signed builds: the committed manifest carries major.minor.patch, and CI builds add the run number as the patch.
 
+## 0.5.0 (2026-11-10)
+
+### Link previews
+- **A preview card for links**: the page's own title, summary, picture, site and date, read from the first part of the page (Open Graph, Twitter cards and plain meta tags) with no cookies and no scripts run. On the thread's story, on links inside comments (up to two per comment, each page once per thread), and on Discover stories on the front page.
+- Cards load as you scroll near them, four at a time, and are kept for two weeks. PDFs, images and YouTube links are recognised without a full fetch.
+- **A thumbs up on a preview likes the link** itself, kept with the thread it came from.
+- Off until you allow it: one switch in settings asks Firefox once for permission to read the pages links point to. Pictures can be switched off, and load without telling the site where you came from.
+
+### Threads that read like a conversation
+- **Quotes become quote blocks** in the colour of the person quoted, with their name, found by searching the comments above. Tap a quote to jump to the comment it came from.
+- **Every person has one bright colour** for the whole thread: on their name, on quotes of their words, and on the "reply to" line, which now reads as a quote too. Blue is left out; amber takes its place.
+- **Typography**: comment text kept to about 72 characters a line, curly quotes, proper dashes and ellipses (never inside code), small capitals for labels, old-style figures with the serif fonts.
+- **Sub-discussions**: branches that share their distinctive words are grouped and labelled ("piracy, donations, emulator · 38"). Chips at the top show one at a time; the tree view marks where each begins.
+
+### Discover, sharper
+- **In threads**: a "You wouldn't have found these" strip at the top, and the same comments highlighted in place. A comment qualifies when it sits outside your usual topics, has 40 or more words, and is worth reading by HN's own signals: its place in HN's order, its author's karma, the replies it drew, evidence, and first-hand experience ("I worked on…", "at my company…"). Each says why.
+- **On the front page**: Discover stays at the top and is now highlighted: a plum band, a tint and a ribbon, in HN's own order too.
+
+### Topics on the front page
+- Stories on one subject are **grouped**: the best one in full, the others as rows beneath it, scored as one topic.
+- **Topic memory**: Hamsa remembers the topics it has seen for 30 days, so a topic is marked **new today** or **returning · day n**. Only new topics count as *emerging* for Discover.
+
+### Thresholds
+- **Flame wars are left out by default**: 40 or more comments at two or more comments per point goes to toss, and never to Discover. A story you liked always stays.
+- **Minimum points and comments**, off by default. Discover is exempt, because new stories start small.
+
+### The digest, made from your likes
+- **Look again**: what you liked comes back for another look after 1, 3, 7, 16, 35, 90 and 180 days. *Still useful* moves it to the next gap; *Remind me tomorrow*, *Stop reminding* and *Unlike* do what they say.
+- **Today, because you liked…**: today's front pages scored only against your likes (shared words, rarer ones counting more; sites; tags). Each story names the like that brought it.
+- **Everything you liked**, by topic, as Stories, Comments and Links, each with its context: the thread, the author, an excerpt, the links in it, the date, and whether it was your thumbs up or an HN upvote.
+- Likes now keep that context when you make them.
+
+### Fonts
+- **Source Sans 3** and **IBM Plex Sans** join the bundled fonts, grouped as serif, sans serif and monospace.
+- **Pairings** in one step: Editorial (Source Serif titles, Source Sans text), Classic (Literata and Inter), Modern (Inter), Bookish (Literata), Easy reading (Atkinson) and Technical (Plex Sans).
+
+### Fixed
+- A threshold reason now shows even when a story was already below the floor.
+- Scoring rules are now v0.5.
+
 ## 0.4.0 (2026-11-10)
 
 ### Discover: what you would not have known

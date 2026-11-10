@@ -8,10 +8,10 @@
 //
 // total = sum of reason points
 // score = 1 - exp(-2 * total / ceiling)        (ceiling is provisional: tune it on real threads)
-import { tokenize } from "./tokenize.js";
+import { tokenize, words } from "./tokenize.js";
 
 export const SCORE_SCHEMA = "hamsa.score/1";
-export const RULES_VERSION = "0.4";
+export const RULES_VERSION = "0.5";
 
 export const SCORING_DEFAULTS = {
   ceiling: 0.9,          // a total of this much reaches about 0.86
@@ -21,6 +21,11 @@ export const SCORING_DEFAULTS = {
   stretchMax: 3,         // most stretch picks among comments
   discoverCount: 5,      // Discover picks per front page, 0 to switch off
   pages: 5,              // front pages merged into one list (1 to 6)
+  minPoints: 0,          // toss stories below this many points (0: off)
+  minComments: 0,        // toss stories below this many comments (0: off)
+  flameFilter: true,     // toss flame wars: many comments on few points
+  flameRatio: 2,         // comments per point at which a busy thread counts as a flame war
+  flameMinComments: 40,  // ...once it has at least this many comments
 };
 
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -55,7 +60,7 @@ const log2 = (x) => Math.log(x) / Math.LN2;
 
 // ---- stories (front page) ----
 // stories: parsed front-page rows. graph: TagGraph or null. profile: see profile.js. compiledBlocks: blocklist.compile().
-export function scoreStories(stories, { graph = null, profile = null, blocks = null, scoring = SCORING_DEFAULTS, dismissed = [], opened = null, prefs = null, karma = null } = {}) {
+export function scoreStories(stories, { graph = null, profile = null, blocks = null, scoring = SCORING_DEFAULTS, dismissed = [], opened = null, prefs = null, karma = null, topics = [] } = {}) {
   const s = { ...SCORING_DEFAULTS, ...scoring };
   const ready = !!(graph && graph.size) || !!(profile && (Object.keys(profile.domains || {}).length || (profile.fav || []).length));
   const titles = graph && graph.size ? graph.scoreTitles(stories.map((x) => x.title)) : stories.map(() => ({ contribs: [], muted: [] }));
@@ -110,26 +115,53 @@ export function scoreStories(stories, { graph = null, profile = null, blocks = n
     const pref = prefs?.items?.[st.id];
     if (pref === "like" && bucket !== "keep") { bucket = "keep"; r.reasons.unshift({ kind: "like", label: "You liked this", points: 0 }); }
     if (pref === "dislike") { bucket = "toss"; r.reasons.unshift({ kind: "dislike", label: "You disliked this", points: 0 }); }
-    return { id: st.id, pref: pref || null, disliked: pref === "dislike", ...r, bucket, matches, blocked, dismissed: gone.has(String(st.id)), tags: r.reasons.filter((x) => x.kind === "tag").map((x) => x.tag), gravity: r2(gravity(st.points, st.age)) };
+    // Thresholds. A flame war (many comments on few points) is tossed; so is anything under your
+    // minimum points or comments. A like overrides both; Discover is exempt from the minimums only.
+    const pts = st.points || 0, com = st.comments || 0;
+    const flame = s.flameFilter !== false && st.kind !== "job" && com >= s.flameMinComments && com / Math.max(1, pts) >= s.flameRatio;
+    const below = st.kind !== "job" && ((s.minPoints > 0 && pts < s.minPoints) || (s.minComments > 0 && com < s.minComments));
+    if (pref !== "like" && flame && !blocked && pref !== "dislike") { bucket = "toss"; r.reasons.unshift({ kind: "threshold", label: `Looks like a flame war: ${com} comments on ${pts} points`, points: 0 }); }
+    else if (pref !== "like" && below && !blocked && pref !== "dislike") { bucket = "toss"; r.reasons.unshift({ kind: "threshold", label: `Below your threshold: ${pts} points, ${com} comments (minimum ${s.minPoints || 0} and ${s.minComments || 0})`, points: 0 }); }
+    return { id: st.id, pref: pref || null, disliked: pref === "dislike", ...r, bucket, matches, blocked, flame, belowThreshold: below, dismissed: gone.has(String(st.id)), tags: r.reasons.filter((x) => x.kind === "tag").map((x) => x.tag), gravity: r2(gravity(st.points, st.age)) };
   });
-  // Near-clusters: lift stories on the same topic as a keep; mark unmatched clusters as emerging.
+  // Topics: near-clusters of stories, shown as groups and scored as a unit. A topic with one story that
+  // matches you lifts the others (more when it holds a keep). Each topic is checked against the topics
+  // seen on earlier days, so a new one can be told from a returning one.
   const clusters = nearClusters(stories, out);
   const unmatchedCluster = new Map();
-  for (const g of clusters) {
+  const topicInfo = [];
+  clusters.forEach((g, ci) => {
+    const termCount = new Map();
+    for (const i of g) for (const t of new Set(tokenize(stories[i].title).filter((w) => w.length > 3))) termCount.set(t, (termCount.get(t) || 0) + 1);
+    const terms = [...termCount].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 6);
+    const tagCount = new Map();
+    for (const i of g) for (const t of out[i].tags || []) tagCount.set(t, (tagCount.get(t) || 0) + 1);
+    const sharedTags = [...tagCount].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+    const wordCount = new Map();
+    for (const i of g) for (const w of new Set(words(stories[i].title).filter((x) => x.length > 3))) wordCount.set(w, (wordCount.get(w) || 0) + 1);
+    const label = sharedTags.slice(0, 2).join(", ") || [...wordCount].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).map(([w]) => w).slice(0, 3).join(", ") || stories[g[0]].title.slice(0, 50);
+    const seen = (topics || []).map((t) => ({ t, shared: terms.filter((x) => t.terms.has?.(x) || t.terms.includes?.(x)).length })).filter((x) => x.shared >= 2).sort((a, b) => b.shared - a.shared)[0];
+    const returning = !!seen && !seen.t.firstSeenToday;
+    const topic = { id: ci, size: g.length, label, terms, status: returning ? "returning" : "new", days: seen ? seen.t.days : 1, first: seen ? seen.t.first : Date.now() };
+    topicInfo.push(topic);
+    for (const i of g) out[i].topic = topic;
     const keepers = g.filter((i) => out[i].bucket === "keep");
-    if (ready && keepers.length) {
-      const lead = stories[keepers[0]];
+    const matched = g.filter((i) => out[i].matches > 0);
+    if (ready && (keepers.length || matched.length)) {
+      const lead = stories[(keepers.length ? keepers : matched)[0]];
+      const pts = r2(Math.min(0.2, (keepers.length ? 0.1 : 0.05) + 0.03 * (g.length - 1)));
       for (const i of g) {
         const v = out[i];
-        if (v.bucket === "keep" || v.blocked || v.dismissed || v.disliked) continue;
-        v.reasons.push({ kind: "cluster", label: `Same topic as a story you keep: ${lead.title.slice(0, 60)}`, points: 0.1 });
+        if (v.bucket === "keep" || v.blocked || v.dismissed || v.disliked || v.flame || v.belowThreshold) continue;
+        v.reasons.push({ kind: "cluster", label: keepers.length ? `Same topic as a story you keep: ${lead.title.slice(0, 60)} (${g.length} stories)` : `Part of a topic you follow: ${label} (${g.length} stories)`, points: pts });
         const f = finish(v.reasons, s);
         Object.assign(v, f, { bucket: bucketFor(f.score, s), clusterOf: lead.id });
       }
     }
-    const unmatched = g.filter((i) => out[i].matches === 0);
-    if (unmatched.length >= 2) for (const i of unmatched) unmatchedCluster.set(stories[i].id, unmatched.length - 1);
-  }
+    const unmatched = g.filter((i) => out[i].matches === 0 && !out[i].flame);
+    if (unmatched.length >= 2) for (const i of unmatched) unmatchedCluster.set(stories[i].id, { others: unmatched.length - 1, isNew: !returning, days: topic.days });
+  });
+  out.topics = topicInfo;
   if (ready) {
     const vocab = new Set(graph ? graph.vocabulary() : []);
     for (const f of [...(profile?.fav || []), ...(opened?.titles || []), ...(prefs?.likeTitles || [])]) for (const t of f.terms || []) vocab.add(t);
@@ -162,7 +194,7 @@ function pickDiscover(stories, out, ctx, s) {
   const cands = [];
   stories.forEach((st, i) => {
     const v = out[i];
-    if (v.blocked || v.dismissed || v.disliked || v.matches > 0 || v.bucket === "keep") return;
+    if (v.blocked || v.dismissed || v.disliked || v.flame || v.matches > 0 || v.bucket === "keep") return;
     const pts = st.points || 0, com = st.comments || 0;
     if (pts < 20 && com < 15) return;
     const words = [...new Set(tokenize(st.title))].filter((w) => w.length > 3);
@@ -178,7 +210,8 @@ function pickDiscover(stories, out, ctx, s) {
     const quality = 0.5 * vel + 0.35 * depth + 0.15 * kNorm;
     const d = st.domain;
     const newSite = d && !(ctx.domains?.[d] || ctx.domains?.[d.split("/")[0]]) ? 1 : 0;
-    const emerging = ctx.unmatchedCluster.get(st.id) || 0;
+    const em = ctx.unmatchedCluster.get(st.id) || null;
+    const emerging = em && em.isNew ? em.others : 0;
     const score = 0.45 * novelty + 0.3 * quality + 0.15 * newSite + 0.1 * (emerging ? 1 : 0);
     cands.push({ i, score, novelty, quality, newSite, emerging, vel, ratio });
   });
@@ -189,7 +222,7 @@ function pickDiscover(stories, out, ctx, s) {
       { kind: "discover", label: `Unfamiliar to you: ${Math.round(c.novelty * 100)}% of its words are in none of your tags, opens or likes`, points: r2(0.45 * c.novelty) },
       { kind: "discover", label: `Worth a look on HN: ${st.points} points, ${st.comments} comments${c.vel >= 0.5 ? ", rising fast" : ""}`, points: r2(0.3 * c.quality) },
       c.newSite ? { kind: "discover", label: `A site you have never saved: ${st.domain}`, points: 0.15 } : null,
-      c.emerging ? { kind: "discover", label: `Emerging: ${c.emerging} other stories on this today`, points: 0.1 } : null,
+      c.emerging ? { kind: "discover", label: `Emerging: a new topic today, with ${c.emerging} other ${c.emerging === 1 ? "story" : "stories"}`, points: 0.1 } : null,
     ].filter(Boolean);
     const total = r2(reasons.reduce((a, x) => a + x.points, 0));
     Object.assign(v, { bucket: "stretch", score: Math.min(1, total), total, reasons, discover: true });

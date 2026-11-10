@@ -57,7 +57,7 @@ function initAppearance() {
 }
 
 // ---- reading ----
-const FAMILY = { system: "system-ui, sans-serif", inter: '"Hamsa Inter", sans-serif', literata: '"Hamsa Literata", serif', "source-serif": '"Hamsa Source Serif", serif', atkinson: '"Hamsa Atkinson", sans-serif', "plex-mono": '"Hamsa Plex Mono", monospace' };
+const FAMILY = { system: "system-ui, sans-serif", inter: '"Hamsa Inter", sans-serif', "source-sans": '"Hamsa Source Sans", sans-serif', "plex-sans": '"Hamsa Plex Sans", sans-serif', literata: '"Hamsa Literata", serif', "source-serif": '"Hamsa Source Serif", serif', atkinson: '"Hamsa Atkinson", sans-serif', "plex-mono": '"Hamsa Plex Mono", monospace' };
 const BOOL = new Set(["justify", "skin", "karma"]);
 function initReading() {
   const s = state.settings;
@@ -77,7 +77,48 @@ function initReading() {
       notify("ok", "Saved", "Open HN tabs update straight away.");
     });
   }
+  const PRESETS_FONT = { editorial: ["source-sans", "source-serif"], classic: ["inter", "literata"], modern: ["inter", "inter"], bookish: ["literata", "literata"], easy: ["atkinson", "atkinson"], plex: ["plex-sans", "plex-sans"] };
+  $("fontPreset").addEventListener("change", async (e) => {
+    const pair = PRESETS_FONT[e.target.value];
+    if (!pair) return;
+    $("font").value = pair[0]; $("titleFont").value = pair[1];
+    await patchSettings({ font: pair[0], titleFont: pair[1] });
+    state.settings.font = pair[0]; state.settings.titleFont = pair[1];
+    sample();
+    notify("ok", "Fonts paired", e.target.selectedOptions[0].textContent);
+    e.target.value = "";
+  });
   sample();
+  initPreviews();
+}
+
+// ---- link previews ----
+async function initPreviews() {
+  const on = $("pv-on"), img = $("pv-img"), st = $("pv-status");
+  const ALL = { origins: ["<all_urls>"] };
+  const info = async () => {
+    const i = await send({ type: "preview-info" }).catch(() => ({}));
+    on.checked = !!(i.on && i.allowed);
+    img.checked = i.images !== false;
+    img.disabled = !on.checked;
+    st.textContent = i.on && i.allowed ? `On. ${(i.cached || 0).toLocaleString()} previews saved.` : i.on ? "Waiting for your permission to read linked pages." : "Off.";
+  };
+  on.addEventListener("change", async () => {
+    if (on.checked) {
+      // The permission prompt has to come straight from the click.
+      const ok = await api.permissions.request(ALL).catch(() => false);
+      if (!ok) { on.checked = false; notify("warn", "Previews need permission", "Without it Hamsa cannot read the pages links point to."); return; }
+      await patchSettings({ previews: true });
+      notify("ok", "Link previews on", "Open a thread on HN to see them.");
+    } else {
+      await patchSettings({ previews: false });
+      notify("ok", "Link previews off");
+    }
+    await info();
+  });
+  img.addEventListener("change", async () => { await patchSettings({ previewImages: img.checked }); notify("ok", img.checked ? "Pictures on" : "Text-only previews"); });
+  $("pv-clear").addEventListener("click", async () => { await send({ type: "previews-clear" }); await info(); notify("ok", "Saved previews cleared"); });
+  await info();
 }
 
 async function initReadingLog() {
@@ -305,11 +346,12 @@ function initScoring() {
   const keys = Object.keys(SCORING_DEFAULTS);
   for (const k of keys) {
     if (!$(`sc-${k}`)) continue;
-    $(`sc-${k}`).value = sc[k];
+    const box = $(`sc-${k}`).type === "checkbox";
+    if (box) $(`sc-${k}`).checked = !!sc[k]; else $(`sc-${k}`).value = sc[k];
     $(`sc-${k}`).addEventListener("change", async (e) => {
       const { settings = {} } = await api.storage.local.get("settings");
-      const v = Number(e.target.value);
-      if (!Number.isFinite(v)) return;
+      const v = box ? e.target.checked : Number(e.target.value);
+      if (!box && !Number.isFinite(v)) return;
       await patchSettings({ scoring: { ...SCORING_DEFAULTS, ...(settings.scoring || {}), [k]: v } });
       notify("ok", "Scoring saved", "Applies from the next HN page you open.");
     });
@@ -318,7 +360,7 @@ function initScoring() {
   $("gate").addEventListener("change", (e) => patchSettings({ gate: e.target.value === "on" }));
   $("sc-reset").addEventListener("click", async () => {
     await patchSettings({ scoring: { ...SCORING_DEFAULTS } });
-    for (const k of keys) if ($(`sc-${k}`)) $(`sc-${k}`).value = SCORING_DEFAULTS[k];
+    for (const k of keys) if ($(`sc-${k}`)) { if ($(`sc-${k}`).type === "checkbox") $(`sc-${k}`).checked = !!SCORING_DEFAULTS[k]; else $(`sc-${k}`).value = SCORING_DEFAULTS[k]; }
     notify("ok", "Scoring reset to starting values");
   });
 }
@@ -408,6 +450,7 @@ function initNav() {
     for (const e of entries) if (e.isIntersecting) { for (const a of links.values()) a.classList.remove("on"); links.get(e.target.id)?.classList.add("on"); }
   }, { rootMargin: "-30% 0px -60% 0px" });
   for (const id of links.keys()) { const el = document.getElementById(id); if (el) io.observe(el); }
+  if (/^#s-[a-z]+$/.test(location.hash)) setTimeout(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" }), 50);
 }
 
 // ---- likes and dislikes ----

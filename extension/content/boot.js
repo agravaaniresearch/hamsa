@@ -14,7 +14,8 @@
   // Bundled fonts, loaded only when a bundled family is chosen.
   const FONTS = [["Hamsa Inter", "inter-latin-400-normal", "inter-latin-600-normal"], ["Hamsa Literata", "literata-latin-400-normal", "literata-latin-600-normal"],
     ["Hamsa Source Serif", "source-serif-4-latin-400-normal", "source-serif-4-latin-600-normal"], ["Hamsa Atkinson", "atkinson-hyperlegible-latin-400-normal", "atkinson-hyperlegible-latin-700-normal"],
-    ["Hamsa Plex Mono", "ibm-plex-mono-latin-400-normal", "ibm-plex-mono-latin-600-normal"]];
+    ["Hamsa Plex Mono", "ibm-plex-mono-latin-400-normal", "ibm-plex-mono-latin-600-normal"], ["Hamsa Source Sans", "source-sans-3-latin-400-normal", "source-sans-3-latin-600-normal"],
+    ["Hamsa Plex Sans", "ibm-plex-sans-latin-400-normal", "ibm-plex-sans-latin-600-normal"]];
   let fontsIn = false;
   function fonts() {
     if (fontsIn) return;
