@@ -3,3 +3,4 @@ dist/
 web-ext-artifacts/
 fixtures/private/
 .env
+extension/.amo-upload-uuid

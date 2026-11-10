@@ -1,9 +1,9 @@
 {
   "name": "hamsa",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Hamsa: relevance-first Hacker News thread summaries for Firefox",
+  "description": "Hamsa: filters Hacker News before any model sees it",
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
     "lint": "web-ext lint --source-dir extension",

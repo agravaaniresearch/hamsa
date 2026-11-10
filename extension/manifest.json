@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Hamsa",
-  "version": "0.1.0",
-  "description": "Relevance-first summaries of long Hacker News threads. Cleans out the noise, ranks what is left against your own Raindrop tags, and says why each point matters to you. Bring your own keys.",
+  "version": "0.2.0",
+  "description": "Filters Hacker News before any model sees it. Merges the front pages, scores every story and comment against your own bookmarks and tags, folds away flame wars, and says why each item survived. Summaries only on request, with your own key.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -15,38 +15,109 @@
       "id": "hamsa@agravaani",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": ["websiteContent", "bookmarksInfo", "authenticationInfo"]
+        "required": [
+          "websiteContent",
+          "bookmarksInfo",
+          "authenticationInfo"
+        ]
       }
     }
   },
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "background.js"
+    ],
     "type": "module"
   },
-  "permissions": ["storage", "tabs", "unlimitedStorage"],
-  "host_permissions": ["https://news.ycombinator.com/*", "https://api.raindrop.io/*"],
-  "optional_host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage"
+  ],
+  "optional_permissions": [
+    "bookmarks",
+    "history"
+  ],
+  "host_permissions": [
+    "https://news.ycombinator.com/*",
+    "https://api.raindrop.io/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://news.ycombinator.com/item*"],
-      "js": ["content/hn.js"],
-      "css": ["content/hn.css"],
+      "matches": [
+        "https://news.ycombinator.com/",
+        "https://news.ycombinator.com/news*",
+        "https://news.ycombinator.com/front*",
+        "https://news.ycombinator.com/newest*",
+        "https://news.ycombinator.com/best*",
+        "https://news.ycombinator.com/ask*",
+        "https://news.ycombinator.com/show*",
+        "https://news.ycombinator.com/item*"
+      ],
+      "js": [
+        "content/boot.js"
+      ],
+      "css": [
+        "content/hamsa.css"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://news.ycombinator.com/",
+        "https://news.ycombinator.com/news*",
+        "https://news.ycombinator.com/front*",
+        "https://news.ycombinator.com/newest*",
+        "https://news.ycombinator.com/best*",
+        "https://news.ycombinator.com/ask*",
+        "https://news.ycombinator.com/show*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/front.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://news.ycombinator.com/item*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/thread.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "sidebar_action": {
-    "default_title": "Hamsa",
-    "default_panel": "sidebar/sidebar.html",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" }
+  "action": {
+    "default_title": "Hamsa digest",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
   },
   "options_ui": {
     "page": "options/options.html",
     "open_in_tab": true
   },
   "commands": {
-    "_execute_sidebar_action": {
-      "suggested_key": { "default": "Alt+Shift+H" },
-      "description": "Toggle the Hamsa sidebar"
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+H"
+      },
+      "description": "Open the Hamsa digest"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon-48.png"
+      ],
+      "matches": [
+        "https://news.ycombinator.com/*"
+      ]
+    }
+  ]
 }

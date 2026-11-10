@@ -1,14 +1,25 @@
 // Deterministic cleanup: no model involved. Order matters and is documented in SCHEMA.md.
+// Every comment ends with a verdict: { score, total, reasons, bucket, rule, rules }.
+// Depth never lowers a score; a rebuttal deep in a chain is protected, and so is the comment it answers.
 import { DEFAULTS, estTokens } from './config.js';
+import { scoreComment, SCORING_DEFAULTS, RULES_VERSION } from './score.js';
 
 const wordCount = (s) => (s.match(/\S+/g) || []).length;
 const hasNumber = (s) => /\d{2,}|\d+\s?%|[$€£₹]\s?\d/.test(s);
 
+// Opening words of a reply that disagrees. Checked after any quoted lines.
+const DISAGREE_START = /^(no[,.!]|nope\b|not (really|true|quite|exactly|so)\b|actually\b|but\b|however\b|i disagree|disagree\b|that'?s (not|wrong|incorrect|false)|this is (not|wrong|false)|wrong\b|incorrect\b|on the contrary|counter-?point|except\b|i don'?t think|that isn'?t|it isn'?t|it'?s not\b|false\b|citation needed)/i;
+const DISAGREE_ANY = /\b(i disagree|that'?s not (true|correct|right|how)|this is (wrong|incorrect|false)|is (incorrect|false|not true)|not true\b|on the contrary|counter-?example|you'?re (wrong|mistaken)|that'?s a myth|in fact,)\b/i;
+const INSULT = /\b(idiot|moron|imbecile|stupid|dumbass|retard\w*|shut up|clown|loser|pathetic|troll|fuck (you|off)|you('re| are) (an? )?(idiot|moron|clown|joke|fool))\b/i;
+const CUSS = /\b(fuck\w*|shit\w*|bullshit|crap|asshole|dickhead|bastard)\b/gi;
+const META = /\b(paywall(ed)?|archive\.(ph|is|today|org)|web\.archive|12ft\.io|clickbait|editoriali[sz]ed|misleading title|title (is|should be|was changed)|dupe\b|duplicate of|why is this (on|at) (the )?(front ?page|hn)|downvot(e|ed|es|ing)\b|flagged|cookie (banner|wall)|can'?t read (it|this|the article)|(unreadable|broken) on mobile|hn guidelines|please don'?t)\b/i;
+
 export function prune(thread, userCfg = {}, relModel = null) {
   const cfg = { ...DEFAULTS, ...userCfg };
+  const scoring = { ...SCORING_DEFAULTS, ...(userCfg.scoring || {}) };
   const all = thread.comments;
   const pruned = [];
-  const stats = { rows_seen: all.length, unavailable: 0, pruned: { downvoted: 0, short: 0, flame_chain: 0, budget: 0 } };
+  const stats = { rows_seen: all.length, unavailable: 0, pruned: { downvoted: 0, abusive: 0, flame_chain: 0, meta: 0, quote_only: 0, short: 0, below_floor: 0, budget: 0 } };
 
   const drop = (c, reason, detail = '') => {
     c.dropped = reason;
@@ -22,6 +33,7 @@ export function prune(thread, userCfg = {}, relModel = null) {
 
   // 2. Features and HN Companion's score, over live comments only.
   const live = all.filter((c) => !c.dropped);
+  const byPathLive = new Map(live.map((c) => [c.path, c]));
   live.forEach((c, i) => {
     c.rank = i;
     c.op = !!c.author && c.author === thread.story.author;
@@ -32,19 +44,42 @@ export function prune(thread, userCfg = {}, relModel = null) {
   });
   const isEvidence = (c) => c.evidence.link || c.evidence.code || c.evidence.number;
 
-  // Personal relevance (see src/relevance/model.js). Without a model every comment is neutral.
+  // Rebuttals: a reply that disagrees with its parent and brings something (evidence, or real length).
+  for (const c of live) {
+    const parent = c.parent_path ? byPathLive.get(c.parent_path) : null;
+    if (!parent || parent.author === c.author) continue;
+    const body = c.text.split('\n\n').filter((p) => !p.startsWith('>')).join(' ').trim();
+    const head = body.split(/\s+/).slice(0, 30).join(' ');
+    if ((DISAGREE_START.test(body) || DISAGREE_ANY.test(head)) && (isEvidence(c) || c.words >= 40)) {
+      c.rebuttal = true;
+      parent.answered = true; // kept as the parent of a rebuttal
+    }
+  }
+
+  // Personal relevance (tag graph). Without a graph every comment is neutral.
   const rels = relModel ? relModel.scoreBatch(live.map((c) => c.text)) : null;
   live.forEach((c, i) => {
     c.rel = rels ? rels[i].score : 0;
     c.relevance = rels ? rels[i] : null;
+    c.verdict = scoreComment(c, { scoring, hasGraph: !!relModel });
   });
+  const protectedC = (c) => c.rebuttal || c.answered || c.op;
 
   // 3. Downvoted.
   for (const c of live) {
     if (c.downvotes >= cfg.maxDownvotes) drop(c, 'downvoted', `${c.downvotes} downvotes`);
   }
 
-  // 4. Flame chains: two authors alternating A B A B ... along one reply path.
+  // 4. Abuse: insults, or a short burst of cussing, with nothing else in it.
+  for (const c of live) {
+    if (c.dropped || c.rel >= cfg.relKeep) continue;
+    const cuss = (c.text.match(CUSS) || []).length;
+    if ((INSULT.test(c.text) && c.words < 80 && !c.evidence.link && !c.evidence.code) || (cuss >= 2 && c.words < 40 && !isEvidence(c))) {
+      drop(c, 'abusive', INSULT.test(c.text) ? 'insult' : `${cuss} swear words`);
+    }
+  }
+
+  // 5. Flame chains: two authors alternating A B A B ... along one reply path.
   //    Runs before the short-comment rule, because short snipes are what make a chain.
   const byPath = new Map(live.filter((c) => !c.dropped).map((c) => [c.path, c]));
   const run = new Map();
@@ -59,7 +94,6 @@ export function prune(thread, userCfg = {}, relModel = null) {
   for (const c of byPath.values()) {
     const r = run.get(c.path);
     if (r < cfg.chainMinRun) continue;
-    // mark this node and the r-1 ancestors that form the alternation
     let node = c, id = null;
     for (let k = 0; k < r && node; k++) {
       if (members.has(node.path)) id = members.get(node.path);
@@ -81,26 +115,59 @@ export function prune(thread, userCfg = {}, relModel = null) {
     group.sort((a, b) => a.rank - b.rank);
     const first = group[0];
     const longest = group.reduce((m, c) => (c.words > m.words ? c : m), group[0]);
+    const last = group[group.length - 1];
     for (const c of group) {
-      const keep = c === first || c === longest || c.op || c.evidence.link || c.evidence.code
+      const keep = c === first || c === longest || c === last || protectedC(c) || c.evidence.link || c.evidence.code
         || c.words >= cfg.chainKeepWords || c.rel >= cfg.relKeep;
-      if (!keep) drop(c, 'flame_chain', `kept ${first.path} and ${longest.path}`);
+      if (!keep) drop(c, 'flame_chain', `${group.length} replies between two people; kept ${first.path}, ${longest.path} and ${last.path}`);
     }
   }
 
-  // 5. Short comments with no evidence.
+  // 6. Meta complaints (paywall, title, voting, the site itself) that add nothing about the subject.
   for (const c of live) {
-    if (c.dropped) continue;
-    // A short comment that drew replies is kept: the replies need it, and HN weighs reply count too.
-    if (c.words < cfg.minWords && !isEvidence(c) && !c.op && c.subtree_size <= 1 && c.rel < cfg.relKeep) drop(c, 'short', `${c.words} words`);
+    if (c.dropped || protectedC(c) || c.evidence.code) continue;
+    if (c.words < 50 && META.test(c.text)) drop(c, 'meta', 'about the site, title or paywall');
   }
 
-  // 6. Token budget: lowest priority first.
+  // 7. Quote-only replies.
+  for (const c of live) {
+    if (c.dropped || protectedC(c)) continue;
+    const paras = c.text.split('\n\n').map((p) => p.trim()).filter(Boolean);
+    if (paras.length && paras.every((p) => p.startsWith('>'))) drop(c, 'quote_only', 'only quotes its parent');
+  }
+
+  // 8. Short comments with no evidence.
+  for (const c of live) {
+    if (c.dropped || protectedC(c)) continue;
+    // A short comment that drew replies is kept: the replies need it, and HN weighs reply count too.
+    if (c.words < cfg.minWords && !isEvidence(c) && c.subtree_size <= 1 && c.rel < cfg.relKeep) drop(c, 'short', `${c.words} words`);
+  }
+
+  // 9. Stretch picks: substantial top-level comments outside your tags. Then the interest floor:
+  //    with a tag graph, comments that match none of your interests stay on the page but do not reach the model.
+  if (relModel) {
+    const tagless = (c) => !(c.verdict.reasons || []).some((r) => r.kind === 'tag' || r.kind === 'near');
+    const cands = live.filter((c) => !c.dropped && !c.parent_path && tagless(c) && c.words >= 60 && isEvidence(c) && c.score >= 800)
+      .sort((a, b) => b.score - a.score).slice(0, cfg.stretchComments ?? 3);
+    for (const c of cands) {
+      c.stretch = true;
+      c.verdict.bucket = 'stretch';
+      c.verdict.reasons.unshift({ kind: 'stretch', label: 'Stretch pick: none of your tags, but substantial and ranked high', points: 0 });
+    }
+    if (cfg.gate !== false) {
+      for (const c of live) {
+        if (c.dropped || protectedC(c) || c.stretch) continue;
+        if (c.verdict.bucket === 'toss') drop(c, 'below_floor', `score ${c.verdict.score}`);
+      }
+    }
+  }
+
+  // 10. Token budget: lowest priority first.
   let kept = live.filter((c) => !c.dropped);
   const cost = (c) => estTokens(c.text) + cfg.lineOverheadTokens;
   let total = kept.reduce((s, c) => s + cost(c), 0);
   if (total > cfg.budgetTokens) {
-    const priority = (c) => c.score * (1 + cfg.relLambda * c.rel) * (c.op ? cfg.opBoost : 1) * (isEvidence(c) ? cfg.evidenceBoost : 1);
+    const priority = (c) => c.score * (1 + cfg.relLambda * c.rel) * (c.op ? cfg.opBoost : 1) * (isEvidence(c) ? cfg.evidenceBoost : 1) * (c.rebuttal ? 1.5 : 1);
     const order = [...kept].sort((a, b) => priority(a) - priority(b) || b.rank - a.rank);
     for (const c of order) {
       if (total <= cfg.budgetTokens) break;
@@ -108,6 +175,17 @@ export function prune(thread, userCfg = {}, relModel = null) {
       total -= cost(c);
     }
     kept = live.filter((c) => !c.dropped);
+  }
+
+  // Final verdicts. A removed comment keeps its score, so the page can say what it would have been.
+  for (const c of all) {
+    if (!c.verdict) c.verdict = { score: 0, total: 0, reasons: [], bucket: 'removed', rules: RULES_VERSION };
+    // The crust is removed. The interest floor and the budget only keep a comment away from the model.
+    if (c.dropped && c.dropped !== 'below_floor' && c.dropped !== 'budget') { c.verdict.bucket = 'removed'; c.verdict.rule = c.dropped; }
+    if (c.dropped === 'below_floor' || c.dropped === 'budget') c.verdict.rule = c.dropped;
+    if (c.rebuttal) c.verdict.rebuttal = true;
+    if (c.answered) c.verdict.answered = true;
+    c.verdict.sent = !c.dropped;
   }
 
   stats.kept = kept.length;

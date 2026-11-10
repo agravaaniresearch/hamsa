@@ -1,29 +1,32 @@
 # Hamsa
 
-Relevance-first summaries of long Hacker News threads, as a Firefox sidebar.
+Hamsa filters Hacker News before any model sees it. It is a Firefox add-on that redraws HN in place:
 
-1. **Clean (no model).** The thread is fetched fresh from HN and cleaned deterministically: dead and deleted rows, heavily downvoted comments, flame chains (A B A B A), short replies without evidence, and finally anything over the token budget, lowest priority first. Ranking reuses HN Companion's score maths.
-2. **Rank against you (no model).** Comments are scored against a graph built from your Raindrop tags, bookmark titles and highlights. Format tags (essay, news, longform) and years are ignored. Muted tags push comments down.
-3. **Summarise (one call, your key).** The cleaned thread goes to the provider and model you choose, with a fixed schema and hard limits (about 250 words). Every point says why it matters to you and cites comment numbers that are checked against the real thread.
+- **Front page**: pages 1 to 4 merged into one list. Every story is scored from 0 to 1 against your own bookmarks and tags and sorted into keep, stretch, maybe and toss, with the reasons one tap away. Tossed stories are hidden, never deleted.
+- **Threads**: flame wars, insults, meta complaints, quote-only and empty replies are folded away with the rule that removed them. Rebuttals deep in a chain are protected. Comments are scored too, and the ones that match none of your interests stay on the page but are not sent to the model.
+- **Summaries on request**: one call with your own key, on the comments that survived. The card shows the tokens sent and received and the cost, and the header keeps today's total.
+- **Daily digest**: the front pages grouped into topics once a day, with no model.
+- **Blocklist**: a shareable JSON file of topic groups, written by hand, drafted by the model from your own words, or suggested from what you dismiss.
+- **Theme**: Auto, Light and Dark, as in Parshva.
 
-There is no voting. You teach it through tag chips (boost, mute), through saving a point to Raindrop, and, if you switch it on, optional thumbs.
+See [DESIGN.md](DESIGN.md) for the reasoning and [SCHEMA.md](SCHEMA.md) for every rule, weight and file format.
+
+## Interest sources
+
+Raindrop (token), browser bookmarks (folders become tags), HN favourites and upvoted stories, browser history (sites only, opt-in), and any exported bookmarks file. Open settings, switch on what you want and press **Sync all sources**.
 
 ## Providers
 
-OpenAI-compatible (OpenAI, DeepSeek, xAI, Qwen, Mistral, Groq, Together, Fireworks, OpenRouter, Ollama, LM Studio, custom URL), Anthropic native, and Gemini native. Keys stay in `storage.local`. A cost estimate in rupees shows before each run.
+OpenAI-compatible (OpenAI, DeepSeek, xAI, Qwen, Mistral, Groq, Together, Fireworks, OpenRouter, Ollama, LM Studio, custom URL), Anthropic native and Gemini native. Keys stay in `storage.local`.
 
 ## Layout
 
-- `extension/lib`: `parse`, `prune`, `render`, `thread` (cleaning), `graph` (tag-graph relevance), `summarise`, `providers`, `pricing`, `raindrop`, `store`
-- `extension/background.js`: all network calls and state changes
-- `extension/sidebar`, `extension/options`, `extension/content`
+- `extension/lib`: `front` (listing pages), `parse`, `prune`, `render`, `thread` (comments), `score` (the 0 to 1 score), `graph` (tag relevance), `profile` (sites, favourites, history), `blocklist`, `cluster` (digest), `summarise`, `providers`, `pricing`, `raindrop`, `store`
+- `extension/background.js`: all network calls, scoring and state changes
+- `extension/content`: the in-page layer (`boot`, `common`, `front`, `thread`, `hamsa.css`)
+- `extension/digest`, `extension/options`, `extension/shared`
 - `test`: `npm test`
-- `scripts/compare.mjs`: offline check of the scorer on a saved thread (your bookmark data stays in `fixtures/private/`, which is git-ignored)
 
 ## Build and release
 
-`npm ci && npm test && npm run lint`. Pushing to `main` runs `.github/workflows/release.yml`, which signs an unlisted XPI with Mozilla and publishes it as a release. Add `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` as repository secrets.
-
-## Works with Modern for Hacker News
-
-Hamsa never reads the rendered page for content. It adds one button and scrolls to a comment by its element id; everything else comes from a fresh fetch of the thread. If the restyle drops the id, the cited number opens the comment on HN in a new tab instead.
+`npm ci && npm test && npm run lint`. Pushing to `main` runs `.github/workflows/release.yml`, which signs an unlisted XPI with Mozilla and publishes it as a release when the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` are set; without them it builds an unsigned package only.

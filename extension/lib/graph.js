@@ -221,18 +221,20 @@ export class TagGraph {
         }
       }
       const contribs = [];
+      const muted = [];
       let penalty = 0;
       const consider = (name, a, via) => {
         const info = this.c.tags.get(name);
         if (!info) return;
-        if (this.isMuted(name)) { if (!via) penalty += MUTE_PENALTY * a; return; }
-        contribs.push({ tag: name, via, a, value: info.weight * Math.exp(this.adj(name)) * a });
+        if (this.isMuted(name)) { if (!via) { penalty += MUTE_PENALTY * a; muted.push(name); } return; }
+        const w = info.weight * Math.exp(this.adj(name));
+        contribs.push({ tag: name, via, a, w, weight: info.weight, value: w * a });
       };
       for (const [name, a] of act) consider(name, a, false);
       for (const [name, a] of reached) consider(name, a, true);
       contribs.sort((x, y) => y.value - x.value);
       const top = contribs.slice(0, 3);
-      return { pos: top.reduce((s, c) => s + c.value, 0), penalty, top, why };
+      return { pos: top.reduce((s, c) => s + c.value, 0), penalty, top, why, muted };
     });
 
     // Scale against this thread, not against an absolute yardstick: in an all-AI thread nearly every
@@ -243,16 +245,63 @@ export class TagGraph {
     const p95 = raws2[Math.floor(0.95 * (raws2.length - 1))] || 0;
     const hi = raws2.length >= 20 ? Math.max(lo + SCORE_REF * 0.5, p95) : SCORE_REF; // small batches use the absolute yardstick
 
-    return detailed.map(({ pos, penalty, top, why }) => {
+    return detailed.map(({ pos, penalty, top, why, muted }) => {
       const rel = Math.max(0, Math.min(1, (pos - lo) / (hi - lo)));
       const score = Math.max(-1, rel - penalty);
       return {
         score: r2(score), abs: r2(Math.min(1, pos / SCORE_REF)), cold: r2(score), learned: 0, w: 0,
         terms: { matched: top.filter((c) => !c.via).map((c) => c.tag), up: [], down: [] },
-        tags: top.map((c) => ({ tag: c.tag, via: c.via, a: r2(c.a), terms: c.via ? [] : why.get(c.tag) || [] })),
+        tags: top.map((c) => ({ tag: c.tag, via: c.via, a: r2(c.a), w: r2(c.w), weight: r2(c.weight), terms: c.via ? [] : why.get(c.tag) || [] })),
+        muted,
       };
     });
   }
+
+  // Short texts (story titles). A title is a handful of words, so the comment rule (an anchor plus a
+  // second term) almost never fires. Here a tag also fires when every word of its name is in the title.
+  // Absolute: no scaling against the batch, so a title scores the same on any page.
+  scoreTitles(texts) {
+    const tagEntries = [...this.c.tags];
+    return texts.map((text) => {
+      const set = new Set(tokenize(text));
+      const act = new Map();
+      if (set.size) {
+        for (const [name, info] of tagEntries) {
+          const nameAll = info.nameTokens.size > 0 && [...info.nameTokens].every((t) => set.has(t));
+          let sum = 0, hits = 0, anchor = false;
+          for (const [term, w] of info.terms) {
+            if (!set.has(term)) continue;
+            sum += w; hits += 1;
+            if (info.anchors.has(term)) anchor = true;
+          }
+          const a = nameAll ? 1 : anchor && hits >= 2 ? Math.min(1, sum / TAG_REF) : 0;
+          if (a >= MIN_ACT) act.set(name, a);
+        }
+      }
+      const reached = new Map();
+      for (const [name, a] of act) {
+        for (const [nb, edge] of this.c.edges.get(name) || []) {
+          const v = SPREAD * edge * a;
+          if (!act.has(nb) && v >= MIN_ACT * SPREAD && v > (reached.get(nb) || 0)) reached.set(nb, v);
+        }
+      }
+      const contribs = [], muted = [];
+      const consider = (name, a, via) => {
+        const info = this.c.tags.get(name);
+        if (!info) return;
+        if (this.isMuted(name)) { if (!via) muted.push(name); return; }
+        const w = info.weight * Math.exp(this.adj(name));
+        contribs.push({ tag: name, via, a: r2(a), w: r2(w), weight: r2(info.weight), value: w * a });
+      };
+      for (const [n, a] of act) consider(n, a, false);
+      for (const [n, a] of reached) consider(n, a, true);
+      contribs.sort((x, y) => y.value - x.value);
+      return { contribs: contribs.slice(0, 4), muted };
+    });
+  }
+
+  // Tag names and counts, for clustering and the options page.
+  tagNames() { return [...this.c.tags.keys()]; }
 
   score(text) { return this.scoreBatch([text])[0]; }
 

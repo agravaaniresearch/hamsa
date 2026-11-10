@@ -24,3 +24,8 @@ export function tokenize(text) {
     .replace(/n['’]t\b/g, '').replace(/['’](s|re|ve|ll|d|m)\b/g, '');
   return (clean.match(/[a-z][a-z0-9+#-]{2,}/g) || []).filter((w) => !STOP.has(w)).map(stem);
 }
+
+// Unstemmed content words, for patterns a person will read (blocklist suggestions, cluster labels).
+export function words(text) {
+  return (String(text).toLowerCase().replace(/https?:\/\/\S+/g, " ").match(/[a-z][a-z0-9+#-]{2,}/g) || []).filter((w) => !STOP.has(w));
+}

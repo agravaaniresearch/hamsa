@@ -9,63 +9,143 @@
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="wrap">
-    <h1><img src="../icons/icon-48.png" alt="" width="28" height="28"> Hamsa settings</h1>
+  <div class="page">
+    <div class="titlebar">
+      <h1><img src="../icons/icon-48.png" alt="" width="30" height="30"> Hamsa</h1>
+      <button id="btn-theme" class="icon" type="button" title="Theme: Auto" aria-label="Theme: Auto"></button>
+    </div>
+    <p class="lede">Hamsa filters Hacker News before any model sees it. Stories and comments are cleaned and scored on this computer against your own interests; a model is called only when you ask for a summary, with your key.</p>
 
-    <section>
-      <h2>Providers</h2>
-      <p class="hint">Bring your own keys. Keys stay on this computer and are sent only to the provider you choose. Test a key to load its models, then tick the models you want in the sidebar.</p>
-      <div id="providers"></div>
+    <div id="perm" class="callout" hidden>
+      <p>Hamsa needs permission to run on news.ycombinator.com before it can filter pages.</p>
+      <button id="perm-grant" class="primary" type="button">Allow on Hacker News</button>
+    </div>
+
+    <h2>Appearance</h2>
+    <div class="seg" role="radiogroup" aria-label="Theme">
+      <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+      <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+      <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
+    </div>
+    <p class="lede small">Auto follows your system setting. The header on Hacker News and on the digest also has a button that cycles through the three.</p>
+    <div class="grid">
+      <label class="field"><span>Hamsa on Hacker News</span>
+        <select id="layer"><option value="on">On: filtered pages</option><option value="off">Off: plain HN</option></select></label>
+      <label class="field"><span>Front page order</span>
+        <select id="order"><option value="hamsa">Hamsa: keep, stretch, maybe</option><option value="hn">HN's own order</option></select></label>
+      <label class="field"><span>Title font</span>
+        <select id="font"><option value="system">System</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+    </div>
+
+    <h2>Interest sources</h2>
+    <p class="lede">Each source only has to supply titles, links and, where it has them, tags. Tags feed the relevance graph; links, favourites and history feed the site and title signals. Nothing here leaves this browser except the calls to Raindrop and HN.</p>
+    <div class="sources">
+      <div class="src">
+        <div class="srchead"><label class="switch"><input type="checkbox" id="src-raindrop"><span></span></label><strong>Raindrop</strong><span id="n-raindrop" class="badge"></span></div>
+        <div class="srcbody">
+          <div class="keyrow"><input id="rd-token" type="password" placeholder="Raindrop test token" autocomplete="off" spellcheck="false" aria-label="Raindrop test token"><button id="rd-eye" class="secondary eye" type="button">Show</button></div>
+          <label class="check"><input type="checkbox" id="src-highlights"> Use highlights (passages you marked count for more than a bare save)</label>
+          <small>Create a test token in Raindrop under Settings, Integrations, For developers. Saving summary points back to Raindrop uses the same token.</small>
+        </div>
+      </div>
+      <div class="src">
+        <div class="srchead"><label class="switch"><input type="checkbox" id="src-hnfav"><span></span></label><strong>HN favourites and upvotes</strong><span id="n-hnfav" class="badge"></span></div>
+        <div class="srcbody">
+          <input id="hn-user" type="text" placeholder="HN user name (filled in when you open HN logged in)" aria-label="HN user name" autocomplete="off" spellcheck="false">
+          <small>Favourites are public. Upvoted stories are read only if you are logged in to HN in this browser. This reads your HN pages, so it may stop working if HN changes its layout.</small>
+        </div>
+      </div>
+      <div class="src">
+        <div class="srchead"><label class="switch"><input type="checkbox" id="src-bookmarks"><span></span></label><strong>Browser bookmarks</strong><span id="n-bookmarks" class="badge"></span></div>
+        <div class="srcbody"><small>Folders act as tags, so a folder called Oncology works like a tag. No key is needed and nothing leaves the browser. Firefox asks for permission the first time.</small></div>
+      </div>
+      <div class="src">
+        <div class="srchead"><label class="switch"><input type="checkbox" id="src-history"><span></span></label><strong>Browser history</strong><span id="n-history" class="badge"></span></div>
+        <div class="srcbody"><small>Opt-in. Only which sites you read often over the last 90 days is kept, as a small signal. It stays in this browser.</small></div>
+      </div>
+      <div class="src">
+        <div class="srchead"><strong>Import a bookmarks file</strong><span id="n-file" class="badge"></span></div>
+        <div class="srcbody">
+          <div class="row"><input id="bm-file" type="file" accept=".html,.htm,.json" aria-label="Bookmarks file"><button id="bm-clear" class="secondary" type="button">Remove imported</button></div>
+          <small>Any browser's exported bookmarks (HTML), or a JSON list from Pinboard or another service. Folders and tags become tags.</small>
+        </div>
+      </div>
+    </div>
+    <div class="row sync">
+      <button id="sync" class="primary" type="button">Sync all sources</button>
+      <span id="sync-status" class="status" role="status"></span>
+    </div>
+
+    <h3>Strongest interests</h3>
+    <p class="lede small">Tap a tag to boost it, tap again to mute it, once more to reset. Muted tags push matching stories and comments down.</p>
+    <div id="top-tags" class="tags"></div>
+    <details class="card">
+      <summary>Tags that are not topics, and extra instructions</summary>
+      <div class="card-body">
+        <label class="field"><span>Tags that are not topics (one per line; resync after changing)</span><textarea id="excluded" rows="3" spellcheck="false"></textarea></label>
+        <small>Format labels such as essay, news or longform, and years, are already ignored.</small>
+        <label class="field"><span>Extra instructions for the model</span><textarea id="extra" rows="3" placeholder="For example: prefer clinical and policy angles over tooling."></textarea></label>
+      </div>
+    </details>
+
+    <h2>Blocklist</h2>
+    <p class="lede">A plain, shareable file of topic groups. A match never deletes a story: it moves it to toss with the rule written next to it, and a strong match on your own tags overrides the block. Drafted and suggested groups stay off until you switch them on.</p>
+    <div id="groups"></div>
+    <div class="row"><button id="add-group" class="secondary" type="button">Add a group</button></div>
+
+    <div class="panel">
+      <label class="field"><span>Describe what you do not want to see</span><textarea id="draft-text" rows="3" placeholder="In your own words. For example: SaaS launches, funding rounds and hiring posts."></textarea></label>
       <div class="row">
-        <select id="preset" aria-label="Provider preset"></select>
-        <button id="add-provider" class="btn">Add provider</button>
+        <button id="draft" class="primary" type="button">Draft rules</button>
+        <button id="test" class="secondary" type="button">Test on today's front page</button>
+        <span id="bl-status" class="status" role="status"></span>
       </div>
-    </section>
+      <small>Drafting is one short call to your selected model. Testing reads pages 1 to 4 of HN and shows what each group would have blocked; nothing is changed.</small>
+      <div id="test-out"></div>
+    </div>
 
-    <section>
-      <h2>Interests from Raindrop</h2>
-      <p class="hint">Hamsa reads your bookmarks and tags once, builds a graph of what you care about, and ranks comments against it. Create a test token under Raindrop settings, Integrations, For developers. Saving points back to Raindrop needs the same token.</p>
-      <div class="row">
-        <input id="rd-token" type="password" placeholder="Raindrop test token" autocomplete="off" spellcheck="false">
-        <button id="rd-save" class="btn">Save token</button>
-        <button id="rd-sync" class="btn primary">Sync tags</button>
-      </div>
-      <p id="rd-status" class="hint"></p>
-      <h3>Strongest interests</h3>
-      <p class="hint">Tap a tag to boost it, tap again to mute it, once more to reset. Muted tags push matching comments down.</p>
-      <div id="top-tags" class="tags"></div>
-      <h3>Tags that are not topics</h3>
-      <p class="hint">One per line. Format labels such as essay, news or longform and years are already ignored. Resync after changing this.</p>
-      <textarea id="excluded" rows="3" spellcheck="false"></textarea>
-      <h3>Extra instructions for the model</h3>
-      <textarea id="extra" rows="3" placeholder="For example: prefer clinical and policy angles over tooling."></textarea>
-    </section>
+    <div id="suggest" class="panel" hidden></div>
 
-    <section>
-      <h2>Summary</h2>
-      <div class="grid">
-        <label>Comment budget (tokens)<input id="budget" type="number" min="2000" max="200000" step="1000"></label>
-        <label>Max output tokens<input id="maxout" type="number" min="400" max="8000" step="100"></label>
-        <label>Rupees per US dollar<input id="fx" type="number" min="1" step="0.5"></label>
-      </div>
-      <label>Price overrides (JSON: model id to {"in":USD,"out":USD} per million tokens)<textarea id="prices" rows="3" spellcheck="false"></textarea></label>
-    </section>
+    <div class="row">
+      <button id="bl-export" class="secondary" type="button">Export blocklist file</button>
+      <label class="secondary filebtn">Import a shared file<input id="bl-import" type="file" accept=".json" hidden></label>
+    </div>
 
-    <section>
-      <h2>Learning and appearance</h2>
-      <div class="grid">
-        <label>Learning<select id="learning"><option value="implicit">Implicit</option><option value="thumbs">Implicit and thumbs</option><option value="off">Off</option></select></label>
-        <label>Theme<select id="theme"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-        <label>Sidebar font<select id="font"><option value="system">System</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
-      </div>
-    </section>
+    <h2>Scoring</h2>
+    <p class="lede">Every story and comment gets a score from 0 to 1: the points of each signal are added up, then scaled with <code>1 - exp(-2 × total ÷ ceiling)</code>. These are starting values, to be tuned on real threads.</p>
+    <div class="grid">
+      <label class="field"><span>Keep at or above</span><input id="sc-keepAt" type="number" min="0" max="1" step="0.05"></label>
+      <label class="field"><span>Maybe at or above</span><input id="sc-maybeAt" type="number" min="0" max="1" step="0.05"></label>
+      <label class="field"><span>Ceiling (provisional)</span><input id="sc-ceiling" type="number" min="0.1" max="5" step="0.05"></label>
+      <label class="field"><span>A blocked story is kept at or above</span><input id="sc-blockOverrideAt" type="number" min="0" max="1.01" step="0.05"></label>
+      <label class="field"><span>One stretch pick per this many keeps</span><input id="sc-stretchPerKeeps" type="number" min="1" max="20" step="1"></label>
+      <label class="field"><span>Most stretch picks per page</span><input id="sc-stretchMax" type="number" min="0" max="10" step="1"></label>
+      <label class="field"><span>Front pages to merge</span><input id="sc-pages" type="number" min="1" max="6" step="1"></label>
+      <label class="field"><span>Comments below the floor</span><select id="gate"><option value="on">Shown, not sent to the model</option><option value="off">Sent to the model too</option></select></label>
+    </div>
+    <div class="row"><button id="sc-reset" class="secondary" type="button">Reset to starting values</button></div>
 
-    <section>
-      <h2>Usage</h2>
-      <div id="usage" class="hint"></div>
-    </section>
-    <p id="saved" class="hint" role="status"></p>
+    <h2>Providers</h2>
+    <p class="lede">Bring your own keys. Keys stay in this browser and are sent only to the provider you add them for. Test a key to load its models, then tick the ones you want in the Summarise menu.</p>
+    <div id="providers"></div>
+    <div class="row">
+      <select id="preset" aria-label="Provider preset"></select>
+      <button id="add-provider" class="secondary" type="button">Add provider</button>
+    </div>
+
+    <h2>Summary</h2>
+    <div class="grid">
+      <label class="field"><span>Comment budget (tokens)</span><input id="budget" type="number" min="2000" max="200000" step="1000"></label>
+      <label class="field"><span>Max output tokens</span><input id="maxout" type="number" min="400" max="8000" step="100"></label>
+      <label class="field"><span>Rupees per US dollar</span><input id="fx" type="number" min="1" step="0.5"></label>
+      <label class="field"><span>Learning from you</span><select id="learning"><option value="implicit">Tags and saves</option><option value="thumbs">Tags, saves and thumbs</option><option value="off">Off</option></select></label>
+    </div>
+    <label class="field"><span>Price overrides (JSON: model id to {"in": USD, "out": USD} per million tokens)</span><textarea id="prices" rows="3" spellcheck="false"></textarea></label>
+
+    <h2>Usage</h2>
+    <div id="usage" class="tablewrap"></div>
   </div>
+  <div id="toast" class="toast" role="status" hidden></div>
   <script type="module" src="options.js"></script>
 </body>
 </html>
