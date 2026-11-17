@@ -16,6 +16,7 @@ const CUSS = /\b(fuck\w*|shit\w*|bullshit|crap|asshole|dickhead|bastard)\b/gi;
 const META = /\b(paywall(ed)?|archive\.(ph|is|today|org)|web\.archive|12ft\.io|clickbait|editoriali[sz]ed|misleading title|title (is|should be|was changed)|dupe\b|duplicate of|why is this (on|at) (the )?(front ?page|hn)|downvot(e|ed|es|ing)\b|flagged|cookie (banner|wall)|can'?t read (it|this|the article)|(unreadable|broken) on mobile|hn guidelines|please don'?t)\b/i;
 
 export function prune(thread, userCfg = {}, relModel = null) {
+  if (relModel && !relModel.size) relModel = null; // a graph with no tag in use yet cannot score anything
   const cfg = { ...DEFAULTS, ...userCfg };
   const scoring = { ...SCORING_DEFAULTS, ...(userCfg.scoring || {}) };
   const all = thread.comments;

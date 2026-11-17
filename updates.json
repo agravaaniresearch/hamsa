@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "hamsa@agravaani": {
+      "updates": [
+        {
+          "version": "0.6.0",
+          "update_link": "https://raw.githubusercontent.com/agravaaniresearch/hamsa/main/releases/hamsa-0.6.0.xpi",
+          "update_hash": "sha256:d67e4c92e7eb6ab9b0daf95055124154378355fe3d5db3cc9cf399d6a7cdae66",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "140.0"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

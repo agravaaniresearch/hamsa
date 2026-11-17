@@ -2,8 +2,10 @@
 // sorted into keep, maybe, stretch and toss. Tossed stories are hidden but never deleted.
 (async () => {
   const H = globalThis.HamsaUI;
-  const { h } = H;
+  const { h, fill } = H;
   if (!document.getElementById("hnmain")) return H.release();
+  // A listing with no stories (an empty page, or a page Hamsa does not know) stays plain HN.
+  if (!document.querySelector("tr.athing.submission, tr.athing .titleline")) return H.release();
   let ui;
   try { ui = await H.send({ type: "ui-state" }); } catch (e) { return H.fail(e.message, "ui-state"); }
   if (!ui.layer) return H.release();
@@ -24,9 +26,9 @@
   try {
     const first = document.documentElement.outerHTML;
     const startMore = document.querySelector("a.morelink")?.getAttribute("href");
-    const more = await H.fetchMore(startMore, want - 1, (_, i) => { status.lastChild.textContent = `Reading page ${i + 2} of ${want}…`; });
+    const more = await H.fetchMore(startMore, want - 1, (_, i) => { status.lastChild.textContent = `Reading page ${i + 2} of ${want}…`; }, { cache: true });
     status.lastChild.textContent = "Scoring…";
-    data = await H.send({ type: "front", pages: [first, ...more] });
+    data = await H.send({ type: "front", pages: [first, ...more], path: location.pathname + location.search });
   } catch (e) {
     return H.fail(e.message, "front");
     return;
@@ -36,19 +38,21 @@
   const show = { keep: true, stretch: true, maybe: true, toss: false };
   let order = ui.order || "hamsa";
   const byId = new Map(data.stories.map((s, i) => [s.id, { s, v: data.verdicts[i] }]));
-  const list = h("div", { class: "h-list", style: "display:flex;flex-direction:column;gap:var(--h-gap)" });
+  const previewSlots = new Map();
+  const list = h("div", { class: "h-list h-front-list" });
 
   // ---- one story ----
   function storyCard({ s, v }) {
     const why = h("div", { hidden: true }, H.whyPanel(v, data.scoring));
-    const whyBtn = h("button", { class: "h-btn", type: "button", "aria-expanded": "false" }, "Why this score");
-    whyBtn.addEventListener("click", () => { why.hidden = !why.hidden; whyBtn.setAttribute("aria-expanded", String(!why.hidden)); whyBtn.textContent = why.hidden ? "Why this score" : "Hide reasons"; });
+    // The score line itself opens the reasons: the number is never shown without a way to its why.
+    const whyBtn = h("button", { class: "h-why-btn", type: "button", "aria-expanded": "false", title: "Why this score" });
+    whyBtn.addEventListener("click", () => { why.hidden = !why.hidden; whyBtn.setAttribute("aria-expanded", String(!why.hidden)); });
     const tags = v.reasons.filter((r) => r.kind === "tag" || r.kind === "near").slice(0, 3);
     const more = v.reasons.length - tags.length;
     const vote = s.voteHref && /auth=/.test(s.voteHref) ? h("button", { class: `h-vote${s.voted ? " on" : ""}`, type: "button", title: "Upvote on HN", "aria-label": "Upvote on HN" }, H.icon("up", 14)) : null;
     vote?.addEventListener("click", async () => {
       if (vote.classList.contains("on")) return;
-      try { await fetch(new URL(s.voteHref, location.href).href, { credentials: "include" }); vote.classList.add("on"); H.toast("Upvoted on HN"); } catch { H.toast("The vote did not go through."); }
+      try { await fetch(new URL(s.voteHref, location.href).href, { credentials: "include" }); vote.classList.add("on"); H.dropMore?.(); H.toast("Upvoted on HN"); } catch { H.toast("The vote did not go through."); }
     });
     const thumbs = H.thumbs({ id: s.id, kind: "story", title: s.title, domain: s.domain, url: s.url, threadId: s.id, points: s.points, author: s.by, tags: v.tags }, v, (next) => {
       const sc = data.scoring;
@@ -57,7 +61,7 @@
       else v.bucket = v._was || (v.score >= sc.keepAt ? "keep" : v.score >= sc.maybeAt ? "maybe" : "toss");
       draw();
     });
-    const dismiss = h("button", { class: "h-btn ghost", type: "button" }, v.dismissed ? "Restore" : "Not for me");
+    const dismiss = h("button", { class: "h-ibtn quiet", type: "button", title: v.dismissed ? "Restore this story" : "Not for me: move to toss", "aria-label": v.dismissed ? "Restore this story" : "Not for me" }, H.icon(v.dismissed ? "up" : "hide", 15));
     dismiss.addEventListener("click", async () => {
       const undo = v.dismissed;
       const r = await H.send({ type: "dismiss", story: { id: s.id, title: s.title, domain: s.domain }, undo }).catch((e) => ({ error: e.message }));
@@ -73,41 +77,50 @@
     const threadUrl = `https://news.ycombinator.com/item?id=${s.id}`;
     const comments = s.kind === "job" ? null : H.track(h("a", { href: `item?id=${s.id}` }, s.comments ? `${s.comments} comments` : "discuss"), entry("thread"), ui);
     const titleA = H.track(h("a", { class: "h-stitle", href: s.url, rel: s.external ? "noopener noreferrer" : null }, s.title), entry("story"), ui);
-    const bgStory = h("button", { class: "h-ibtn", type: "button", title: "Open the story in a background tab", "aria-label": "Open the story in a background tab", onclick: () => H.openTab(s.url, false, entry("story")) }, H.icon("bg", 16));
-    const bgThread = s.kind === "job" ? null : h("button", { class: "h-btn", type: "button", title: "Open the filtered thread in a background tab", onclick: () => H.openTab(threadUrl, false, entry("thread")) }, "Thread in background");
+    const bgStory = h("button", { class: "h-ibtn quiet", type: "button", title: "Open the story in a background tab", "aria-label": "Open the story in a background tab", onclick: () => H.openTab(s.url, false, entry("story")) }, H.icon("bg", 16));
+    const bgThread = s.kind === "job" ? null : h("button", { class: "h-ibtn quiet", type: "button", title: "Open the filtered thread in a background tab", "aria-label": "Open the filtered thread in a background tab", onclick: () => H.openTab(threadUrl, false, entry("thread")) }, H.icon("chat", 16));
     const dups = (v.dups || []).map((id) => byId.get(id)).filter(Boolean);
     const also = dups.length ? h("div", { class: "h-also" }, h("span", {}, `Also submitted ${dups.length === 1 ? "once more" : `${dups.length} more times`}:`),
       dups.map(({ s: d }) => h("span", {}, H.track(h("a", { href: `item?id=${d.id}` }, d.title), { kind: "thread", id: d.id, title: d.title, url: `https://news.ycombinator.com/item?id=${d.id}`, domain: d.domain, page: "front" }, ui), ` · ${d.points} points · ${d.comments} comments${d.domain && d.domain !== s.domain ? ` · ${d.domain}` : ""}`))) : null;
-    const preview = v.bucket === "stretch" && ui.previews !== false && s.external && s.url ? H.previewSlot(s.url, { ui, page: "front", title: s.title, threadId: s.id, threadTitle: s.title }) : null;
+    let preview = null;
+    if (v.bucket === "stretch" && ui.previews !== false && s.external && s.url) {
+      // One slot per story for the life of the page, moved into each redraw (see thread.js).
+      const old = previewSlots.get(s.id);
+      preview = old ? (old.dataset.dead ? null : old) : H.previewSlot(s.url, { ui, page: "front", title: s.title, threadId: s.id, threadTitle: s.title });
+      if (preview) previewSlots.set(s.id, preview);
+    }
+    const thumbBtns = thumbs;
+    for (const b of thumbBtns) b.classList.add("quiet");
+    fill(whyBtn,
+      H.bar(v.bucket, v.score, data.scoring?.keepAt), h("span", { class: "h-num" }, v.score.toFixed(2)),
+      tags.map((r) => h("span", { class: "h-tag", title: r.label }, r.tag)),
+      v.blocked ? h("span", { class: "h-flag plain" }, `blocked: ${v.blocked.group}`) : null,
+      v.discover ? h("span", { class: "h-flag stretch" }, "new to you") : null,
+      v.clusterOf ? h("span", { class: "h-flag plain" }, "same topic as a keep") : null,
+      v.flame ? h("span", { class: "h-flag plain", title: "Many comments on few points usually means an argument" }, "flame war") : null,
+      v.belowThreshold && !v.flame ? h("span", { class: "h-flag plain" }, "below your threshold") : null,
+      v.topic && v.topic.size > 1 && v.topic.status === "returning" ? h("span", { class: "h-flag plain", title: `On the front page for ${v.topic.days} days` }, `returning topic, day ${v.topic.days}`) : null,
+      h("span", { class: "h-note" }, why.hidden ? (more > 0 ? `why, and ${more} more signal${more > 1 ? "s" : ""}` : "why") : "hide"));
+    whyBtn.addEventListener("click", () => { whyBtn.lastChild.textContent = why.hidden ? (more > 0 ? `why, and ${more} more signal${more > 1 ? "s" : ""}` : "why") : "hide"; });
+    // In Hamsa's order the section already names the bucket, so the badge shows only in HN's order.
     return h("article", { class: `h-card${v.bucket === "toss" ? " h-dim" : ""}${v.bucket === "stretch" ? " h-stretch-card" : ""}`, id: `hamsa-s-${s.id}` },
-      v.bucket === "stretch" ? h("div", { class: "h-ribbon" }, H.icon("compass", 13), "Discover") : null,
       h("div", { class: "h-story" },
         h("div", { class: "h-rank", title: "Rank on Hacker News" }, s.rank ? String(s.rank) : ""),
         h("div", { class: "h-sbody" },
-          h("div", { class: "h-shead" },
-            titleA,
-            H.badge(v.bucket)),
+          h("div", { class: "h-shead" }, titleA, order === "hn" ? H.badge(v.bucket) : null),
           h("div", { class: "h-meta" },
             vote,
             s.domain ? h("a", { href: `from?site=${encodeURIComponent(s.domain)}` }, s.domain) : null,
-            s.points ? h("span", {}, `· ${s.points} points`) : null,
-            s.by ? h("span", {}, "· by ", h("a", { href: `user?id=${encodeURIComponent(s.by)}` }, s.by)) : null,
-            s.ageText ? h("span", {}, `· ${s.ageText}`) : null,
-            comments ? h("span", {}, "· ", comments) : null),
-          h("div", { class: "h-score" },
-            H.bar(v.bucket, v.score), h("span", { class: "h-num" }, v.score.toFixed(2)),
-            tags.map((r) => h("span", { class: "h-tag", title: r.label }, r.tag)),
-            v.blocked ? h("span", { class: "h-flag plain" }, `blocked: ${v.blocked.group}`) : null,
-            v.bucket === "stretch" ? h("span", { class: "h-flag stretch" }, v.discover ? "new to you" : "outside your tags") : null,
-            v.clusterOf ? h("span", { class: "h-flag plain" }, "same topic as a keep") : null,
-            v.flame ? h("span", { class: "h-flag plain", title: "Many comments on few points usually means an argument" }, "flame war") : null,
-            v.belowThreshold && !v.flame ? h("span", { class: "h-flag plain" }, "below your threshold") : null,
-            v.topic && v.topic.size > 1 && v.topic.status === "returning" ? h("span", { class: "h-flag plain", title: `On the front page for ${v.topic.days} days` }, `returning topic · day ${v.topic.days}`) : null,
-            more > 0 ? h("span", { class: "h-note" }, `+${more} more signal${more > 1 ? "s" : ""}`) : null),
-          also,
-          preview,
+            s.points ? h("span", {}, `${s.points} points`) : null,
+            s.by ? h("span", {}, "by ", h("a", { href: `user?id=${encodeURIComponent(s.by)}` }, s.by)) : null,
+            s.ageText ? h("span", {}, s.ageText) : null,
+            comments,
+            h("span", { class: "h-grow" }),
+            h("span", { class: "h-acts" }, bgThread, s.external ? bgStory : null, thumbBtns, dismiss)),
+          whyBtn,
           why,
-          h("div", { class: "h-row" }, whyBtn, comments ? H.track(h("a", { class: "h-btn", href: `item?id=${s.id}` }, "Open filtered thread"), entry("thread"), ui) : null, bgThread, s.external ? bgStory : null, thumbs, dismiss))));
+          also,
+          preview)));
   }
 
   // ---- topics: stories on one subject sit together, the best one in full and the rest as rows ----
@@ -139,7 +152,7 @@
     const entry = { kind: "story", id: s.id, title: s.title, url: s.url, domain: s.domain, tags: v.tags, score: v.score, bucket: v.bucket, page: "front" };
     return h("div", { class: "h-trow", id: `hamsa-s-${s.id}` },
       h("div", { class: "h-trow-line" },
-        H.bar(v.bucket, v.score),
+        H.bar(v.bucket, v.score, data.scoring?.keepAt),
         H.track(h("a", { class: "h-ttitle", href: s.url }, s.title), entry, ui),
         h("span", { class: "h-note" }, [s.domain, s.points ? `${s.points} points` : null].filter(Boolean).join(" · ")),
         s.kind === "job" ? null : H.track(h("a", { class: "h-note", href: `item?id=${s.id}` }, `${s.comments || 0} comments`), { ...entry, kind: "thread", url: `https://news.ycombinator.com/item?id=${s.id}` }, ui),
@@ -173,6 +186,7 @@
       }
     } else out.push(...visible.map(storyCard));
     list.replaceChildren(...(out.length ? out : [h("div", { class: "h-note" }, "Nothing in the buckets you chose. Switch on Maybe or Toss above.")]));
+    H.pvSweep();
     const LABEL = { keep: "Keep", stretch: "Discover", maybe: "Maybe", toss: "Toss" };
     chips.replaceChildren(...["stretch", "keep", "maybe", "toss"].map((b) => {
       const c = h("button", { class: `h-chip ${b}`, type: "button", "aria-pressed": String(show[b]) }, `${LABEL[b]} ${counts[b]}`);

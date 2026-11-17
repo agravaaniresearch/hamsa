@@ -6,10 +6,13 @@ const headers = (token) => ({ Authorization: `Bearer ${token}`, "content-type": 
 
 export async function fetchAllItems(token, { fetchImpl = fetch, onProgress, maxPages = 200 } = {}) {
   const items = [];
+  let limited = 0;
   for (let page = 0; page < maxPages; page++) {
     const res = await fetchImpl(`${BASE}/raindrops/0?perpage=50&page=${page}`, { headers: headers(token) });
     if (res.status === 401) throw new Error("Raindrop rejected the token.");
-    if (res.status === 429) { await new Promise((r) => setTimeout(r, 1500)); page--; continue; }
+    // Rate limited: wait and retry the same page, at most three times in a row, then stop with an error.
+    if (res.status === 429) { if (++limited > 3) throw new Error("Raindrop keeps saying too many requests. Try again in a few minutes."); await new Promise((r) => setTimeout(r, 1000)); page--; continue; }
+    limited = 0;
     if (!res.ok) throw new Error(`Raindrop returned ${res.status}.`);
     const j = await res.json();
     const batch = j.items || [];

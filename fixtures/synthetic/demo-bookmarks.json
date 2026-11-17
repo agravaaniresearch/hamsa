@@ -1,0 +1,552 @@
+[
+ {
+  "title": "gpu kernel optimization guide",
+  "excerpt": "gpu kernel optimization guide notes and analysis",
+  "tags": [
+   "gpu"
+  ],
+  "link": "https://example.org/gpu/0",
+  "created": "2025-01-10T00:00:00.000Z"
+ },
+ {
+  "title": "cuda kernels and gpu memory",
+  "excerpt": "cuda kernels and gpu memory notes and analysis",
+  "tags": [
+   "gpu"
+  ],
+  "link": "https://example.org/gpu/1",
+  "created": "2025-01-19T00:00:00.000Z"
+ },
+ {
+  "title": "writing fast gpu kernels",
+  "excerpt": "writing fast gpu kernels notes and analysis",
+  "tags": [
+   "gpu"
+  ],
+  "link": "https://example.org/gpu/2",
+  "created": "2025-01-28T00:00:00.000Z"
+ },
+ {
+  "title": "gpu inference throughput",
+  "excerpt": "gpu inference throughput notes and analysis",
+  "tags": [
+   "gpu"
+  ],
+  "link": "https://example.org/gpu/3",
+  "created": "2025-02-06T00:00:00.000Z"
+ },
+ {
+  "title": "tensor cores and gpu kernels",
+  "excerpt": "tensor cores and gpu kernels notes and analysis",
+  "tags": [
+   "gpu"
+  ],
+  "link": "https://example.org/gpu/4",
+  "created": "2025-02-15T00:00:00.000Z"
+ },
+ {
+  "title": "ssa form and register allocation",
+  "excerpt": "ssa form and register allocation notes and analysis",
+  "tags": [
+   "compilers"
+  ],
+  "link": "https://example.org/compilers/0",
+  "created": "2025-02-24T00:00:00.000Z"
+ },
+ {
+  "title": "liveness analysis in compilers",
+  "excerpt": "liveness analysis in compilers notes and analysis",
+  "tags": [
+   "compilers"
+  ],
+  "link": "https://example.org/compilers/1",
+  "created": "2025-03-05T00:00:00.000Z"
+ },
+ {
+  "title": "compiler backends explained",
+  "excerpt": "compiler backends explained notes and analysis",
+  "tags": [
+   "compilers"
+  ],
+  "link": "https://example.org/compilers/2",
+  "created": "2025-03-14T00:00:00.000Z"
+ },
+ {
+  "title": "register allocation with ssa",
+  "excerpt": "register allocation with ssa notes and analysis",
+  "tags": [
+   "compilers"
+  ],
+  "link": "https://example.org/compilers/3",
+  "created": "2025-03-23T00:00:00.000Z"
+ },
+ {
+  "title": "llvm passes for compilers",
+  "excerpt": "llvm passes for compilers notes and analysis",
+  "tags": [
+   "compilers"
+  ],
+  "link": "https://example.org/compilers/4",
+  "created": "2025-04-01T00:00:00.000Z"
+ },
+ {
+  "title": "rust gui frameworks compared",
+  "excerpt": "rust gui frameworks compared notes and analysis",
+  "tags": [
+   "rust"
+  ],
+  "link": "https://example.org/rust/0",
+  "created": "2025-04-10T00:00:00.000Z"
+ },
+ {
+  "title": "rust ownership for systems programming",
+  "excerpt": "rust ownership for systems programming notes and analysis",
+  "tags": [
+   "rust"
+  ],
+  "link": "https://example.org/rust/1",
+  "created": "2025-04-19T00:00:00.000Z"
+ },
+ {
+  "title": "building a database client in rust",
+  "excerpt": "building a database client in rust notes and analysis",
+  "tags": [
+   "rust"
+  ],
+  "link": "https://example.org/rust/2",
+  "created": "2025-04-28T00:00:00.000Z"
+ },
+ {
+  "title": "async rust in practice",
+  "excerpt": "async rust in practice notes and analysis",
+  "tags": [
+   "rust"
+  ],
+  "link": "https://example.org/rust/3",
+  "created": "2025-05-07T00:00:00.000Z"
+ },
+ {
+  "title": "rust ui toolkits",
+  "excerpt": "rust ui toolkits notes and analysis",
+  "tags": [
+   "rust"
+  ],
+  "link": "https://example.org/rust/4",
+  "created": "2025-05-16T00:00:00.000Z"
+ },
+ {
+  "title": "supply chain attack postmortem",
+  "excerpt": "supply chain attack postmortem notes and analysis",
+  "tags": [
+   "security"
+  ],
+  "link": "https://example.org/security/0",
+  "created": "2025-05-25T00:00:00.000Z"
+ },
+ {
+  "title": "cybersecurity incident response",
+  "excerpt": "cybersecurity incident response notes and analysis",
+  "tags": [
+   "security"
+  ],
+  "link": "https://example.org/security/1",
+  "created": "2025-06-03T00:00:00.000Z"
+ },
+ {
+  "title": "car key fob unlock attack",
+  "excerpt": "car key fob unlock attack notes and analysis",
+  "tags": [
+   "security"
+  ],
+  "link": "https://example.org/security/2",
+  "created": "2025-06-12T00:00:00.000Z"
+ },
+ {
+  "title": "iam access control decisions",
+  "excerpt": "iam access control decisions notes and analysis",
+  "tags": [
+   "security"
+  ],
+  "link": "https://example.org/security/3",
+  "created": "2025-06-21T00:00:00.000Z"
+ },
+ {
+  "title": "audit of vpn providers security",
+  "excerpt": "audit of vpn providers security notes and analysis",
+  "tags": [
+   "security"
+  ],
+  "link": "https://example.org/security/4",
+  "created": "2025-06-30T00:00:00.000Z"
+ },
+ {
+  "title": "personal data sent to annotators",
+  "excerpt": "personal data sent to annotators notes and analysis",
+  "tags": [
+   "privacy"
+  ],
+  "link": "https://example.org/privacy/0",
+  "created": "2025-07-09T00:00:00.000Z"
+ },
+ {
+  "title": "vpn audit privacy",
+  "excerpt": "vpn audit privacy notes and analysis",
+  "tags": [
+   "privacy"
+  ],
+  "link": "https://example.org/privacy/1",
+  "created": "2025-07-18T00:00:00.000Z"
+ },
+ {
+  "title": "who used my mac privacy",
+  "excerpt": "who used my mac privacy notes and analysis",
+  "tags": [
+   "privacy"
+  ],
+  "link": "https://example.org/privacy/2",
+  "created": "2025-07-27T00:00:00.000Z"
+ },
+ {
+  "title": "email privacy and data brokers",
+  "excerpt": "email privacy and data brokers notes and analysis",
+  "tags": [
+   "privacy"
+  ],
+  "link": "https://example.org/privacy/3",
+  "created": "2025-08-05T00:00:00.000Z"
+ },
+ {
+  "title": "privacy of cloud drive files",
+  "excerpt": "privacy of cloud drive files notes and analysis",
+  "tags": [
+   "privacy"
+  ],
+  "link": "https://example.org/privacy/4",
+  "created": "2025-08-14T00:00:00.000Z"
+ },
+ {
+  "title": "cadmium telluride photovoltaic panels",
+  "excerpt": "cadmium telluride photovoltaic panels notes and analysis",
+  "tags": [
+   "solar energy"
+  ],
+  "link": "https://example.org/solar-energy/0",
+  "created": "2025-08-23T00:00:00.000Z"
+ },
+ {
+  "title": "agrivoltaics solar farms",
+  "excerpt": "agrivoltaics solar farms notes and analysis",
+  "tags": [
+   "solar energy"
+  ],
+  "link": "https://example.org/solar-energy/1",
+  "created": "2025-09-01T00:00:00.000Z"
+ },
+ {
+  "title": "perovskite photovoltaic efficiency",
+  "excerpt": "perovskite photovoltaic efficiency notes and analysis",
+  "tags": [
+   "solar energy"
+  ],
+  "link": "https://example.org/solar-energy/2",
+  "created": "2025-09-10T00:00:00.000Z"
+ },
+ {
+  "title": "solar panels on farmland",
+  "excerpt": "solar panels on farmland notes and analysis",
+  "tags": [
+   "solar energy"
+  ],
+  "link": "https://example.org/solar-energy/3",
+  "created": "2025-09-19T00:00:00.000Z"
+ },
+ {
+  "title": "photovoltaic panel recycling",
+  "excerpt": "photovoltaic panel recycling notes and analysis",
+  "tags": [
+   "solar energy"
+  ],
+  "link": "https://example.org/solar-energy/4",
+  "created": "2025-09-28T00:00:00.000Z"
+ },
+ {
+  "title": "silicon carbide wafer power electronics",
+  "excerpt": "silicon carbide wafer power electronics notes and analysis",
+  "tags": [
+   "semiconductors"
+  ],
+  "link": "https://example.org/semiconductors/0",
+  "created": "2025-10-07T00:00:00.000Z"
+ },
+ {
+  "title": "300 millimeter wafer fabs",
+  "excerpt": "300 millimeter wafer fabs notes and analysis",
+  "tags": [
+   "semiconductors"
+  ],
+  "link": "https://example.org/semiconductors/1",
+  "created": "2025-10-16T00:00:00.000Z"
+ },
+ {
+  "title": "sic power semiconductors",
+  "excerpt": "sic power semiconductors notes and analysis",
+  "tags": [
+   "semiconductors"
+  ],
+  "link": "https://example.org/semiconductors/2",
+  "created": "2025-10-25T00:00:00.000Z"
+ },
+ {
+  "title": "semiconductor supply chain india",
+  "excerpt": "semiconductor supply chain india notes and analysis",
+  "tags": [
+   "semiconductors",
+   "geopolitics"
+  ],
+  "link": "https://example.org/semiconductors/3",
+  "created": "2025-11-03T00:00:00.000Z"
+ },
+ {
+  "title": "wafer fab economics",
+  "excerpt": "wafer fab economics notes and analysis",
+  "tags": [
+   "semiconductors",
+   "geopolitics"
+  ],
+  "link": "https://example.org/semiconductors/4",
+  "created": "2025-11-12T00:00:00.000Z"
+ },
+ {
+  "title": "starship booster catch",
+  "excerpt": "starship booster catch notes and analysis",
+  "tags": [
+   "space"
+  ],
+  "link": "https://example.org/space/0",
+  "created": "2025-11-21T00:00:00.000Z"
+ },
+ {
+  "title": "satellite imagery every pass",
+  "excerpt": "satellite imagery every pass notes and analysis",
+  "tags": [
+   "space"
+  ],
+  "link": "https://example.org/space/1",
+  "created": "2025-11-30T00:00:00.000Z"
+ },
+ {
+  "title": "starship flight test results",
+  "excerpt": "starship flight test results notes and analysis",
+  "tags": [
+   "space"
+  ],
+  "link": "https://example.org/space/2",
+  "created": "2025-12-09T00:00:00.000Z"
+ },
+ {
+  "title": "low earth orbit satellite constellations",
+  "excerpt": "low earth orbit satellite constellations notes and analysis",
+  "tags": [
+   "space"
+  ],
+  "link": "https://example.org/space/3",
+  "created": "2025-12-18T00:00:00.000Z"
+ },
+ {
+  "title": "rocket booster reuse",
+  "excerpt": "rocket booster reuse notes and analysis",
+  "tags": [
+   "space"
+  ],
+  "link": "https://example.org/space/4",
+  "created": "2025-12-27T00:00:00.000Z"
+ },
+ {
+  "title": "running moe models on m1 max",
+  "excerpt": "running moe models on m1 max notes and analysis",
+  "tags": [
+   "local models",
+   "machine learning"
+  ],
+  "link": "https://example.org/local-models/0",
+  "created": "2026-01-05T00:00:00.000Z"
+ },
+ {
+  "title": "local llm inference on a laptop",
+  "excerpt": "local llm inference on a laptop notes and analysis",
+  "tags": [
+   "local models",
+   "machine learning"
+  ],
+  "link": "https://example.org/local-models/1",
+  "created": "2026-01-14T00:00:00.000Z"
+ },
+ {
+  "title": "quantized models under 16 gb",
+  "excerpt": "quantized models under 16 gb notes and analysis",
+  "tags": [
+   "local models",
+   "machine learning"
+  ],
+  "link": "https://example.org/local-models/2",
+  "created": "2026-01-23T00:00:00.000Z"
+ },
+ {
+  "title": "100b parameter inference on low power",
+  "excerpt": "100b parameter inference on low power notes and analysis",
+  "tags": [
+   "local models",
+   "machine learning"
+  ],
+  "link": "https://example.org/local-models/3",
+  "created": "2026-02-01T00:00:00.000Z"
+ },
+ {
+  "title": "small efficient models",
+  "excerpt": "small efficient models notes and analysis",
+  "tags": [
+   "local models",
+   "machine learning"
+  ],
+  "link": "https://example.org/local-models/4",
+  "created": "2026-02-10T00:00:00.000Z"
+ },
+ {
+  "title": "rare earth magnets supply",
+  "excerpt": "rare earth magnets supply notes and analysis",
+  "tags": [
+   "rare earths",
+   "geopolitics"
+  ],
+  "link": "https://example.org/rare-earths/0",
+  "created": "2026-02-19T00:00:00.000Z"
+ },
+ {
+  "title": "magnets and rare earth mining",
+  "excerpt": "magnets and rare earth mining notes and analysis",
+  "tags": [
+   "rare earths",
+   "geopolitics"
+  ],
+  "link": "https://example.org/rare-earths/1",
+  "created": "2026-02-28T00:00:00.000Z"
+ },
+ {
+  "title": "china rare earth export controls",
+  "excerpt": "china rare earth export controls notes and analysis",
+  "tags": [
+   "rare earths",
+   "geopolitics"
+  ],
+  "link": "https://example.org/rare-earths/2",
+  "created": "2026-03-09T00:00:00.000Z"
+ },
+ {
+  "title": "rare earth refining capacity",
+  "excerpt": "rare earth refining capacity notes and analysis",
+  "tags": [
+   "rare earths"
+  ],
+  "link": "https://example.org/rare-earths/3",
+  "created": "2026-03-18T00:00:00.000Z"
+ },
+ {
+  "title": "neodymium magnets",
+  "excerpt": "neodymium magnets notes and analysis",
+  "tags": [
+   "rare earths"
+  ],
+  "link": "https://example.org/rare-earths/4",
+  "created": "2026-03-27T00:00:00.000Z"
+ },
+ {
+  "title": "export controls and chips",
+  "excerpt": "export controls and chips notes and analysis",
+  "tags": [
+   "geopolitics"
+  ],
+  "link": "https://example.org/geopolitics/0",
+  "created": "2026-04-05T00:00:00.000Z"
+ },
+ {
+  "title": "china rare earth leverage",
+  "excerpt": "china rare earth leverage notes and analysis",
+  "tags": [
+   "geopolitics"
+  ],
+  "link": "https://example.org/geopolitics/1",
+  "created": "2026-04-14T00:00:00.000Z"
+ },
+ {
+  "title": "india semiconductor policy",
+  "excerpt": "india semiconductor policy notes and analysis",
+  "tags": [
+   "geopolitics"
+  ],
+  "link": "https://example.org/geopolitics/2",
+  "created": "2026-04-23T00:00:00.000Z"
+ },
+ {
+  "title": "drones and air defence",
+  "excerpt": "drones and air defence notes and analysis",
+  "tags": [
+   "geopolitics"
+  ],
+  "link": "https://example.org/geopolitics/3",
+  "created": "2026-05-02T00:00:00.000Z"
+ },
+ {
+  "title": "geopolitics of satellites",
+  "excerpt": "geopolitics of satellites notes and analysis",
+  "tags": [
+   "geopolitics"
+  ],
+  "link": "https://example.org/geopolitics/4",
+  "created": "2026-05-11T00:00:00.000Z"
+ },
+ {
+  "title": "k-means clustering faster epochs",
+  "excerpt": "k-means clustering faster epochs notes and analysis",
+  "tags": [
+   "machine learning"
+  ],
+  "link": "https://example.org/machine-learning/0",
+  "created": "2026-05-20T00:00:00.000Z"
+ },
+ {
+  "title": "text generation coarse to fine",
+  "excerpt": "text generation coarse to fine notes and analysis",
+  "tags": [
+   "machine learning"
+  ],
+  "link": "https://example.org/machine-learning/1",
+  "created": "2026-05-29T00:00:00.000Z"
+ },
+ {
+  "title": "clustering algorithms compared",
+  "excerpt": "clustering algorithms compared notes and analysis",
+  "tags": [
+   "machine learning"
+  ],
+  "link": "https://example.org/machine-learning/2",
+  "created": "2026-06-07T00:00:00.000Z"
+ },
+ {
+  "title": "diffusion models for text generation",
+  "excerpt": "diffusion models for text generation notes and analysis",
+  "tags": [
+   "machine learning"
+  ],
+  "link": "https://example.org/machine-learning/3",
+  "created": "2026-06-16T00:00:00.000Z"
+ },
+ {
+  "title": "training efficiency epochs",
+  "excerpt": "training efficiency epochs notes and analysis",
+  "tags": [
+   "machine learning"
+  ],
+  "link": "https://example.org/machine-learning/4",
+  "created": "2026-06-25T00:00:00.000Z"
+ }
+]

@@ -1,17 +1,17 @@
 :root {
   color-scheme: light dark;
-  --bg: #faf7f2;
-  --surface: #f1ece3;
-  --surface-2: #e9e2d5;
-  --text: #26211b;
-  --muted: #7a6f62;
-  --border: #e2dacb;
-  --field: #b9ad99;
-  --accent: #b4531a;
-  --accent-text: #fff8f0;
-  --code-bg: #efe9dd;
-  --ok: #3f6b2e;
-  --warn: #94620d;
+  --bg: #f3f5ef;
+  --surface: #e8ece4;
+  --surface-2: #dce2d7;
+  --text: #1d2620;
+  --muted: #5e6a62;
+  --border: #d3dacf;
+  --field: #a9b4aa;
+  --accent: #a8326a;
+  --accent-text: #fff6fa;
+  --code-bg: #e4e9e0;
+  --ok: #36692c;
+  --warn: #87620b;
   --danger: #a3261f;
   --danger-bg: #f7e1dd;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -24,35 +24,35 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-    --bg: #161412;
-    --surface: #1e1b18;
-    --surface-2: #2a2622;
-    --text: #ece6dc;
-    --muted: #aba295;
-    --border: #38332c;
-    --field: #5f584d;
-    --accent: #ea9356;
-    --accent-text: #161412;
-    --code-bg: #100e0c;
-    --ok: #9ccb82;
-    --warn: #e3b866;
+    --bg: #111714;
+    --surface: #1a221d;
+    --surface-2: #243029;
+    --text: #e3eae2;
+    --muted: #9daaa1;
+    --border: #2c3830;
+    --field: #4e5c53;
+    --accent: #f28db9;
+    --accent-text: #111714;
+    --code-bg: #0b100d;
+    --ok: #9fcf87;
+    --warn: #e5c06c;
     --danger: #f0a39b;
     --danger-bg: #3a211e;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #161412;
-    --surface: #1e1b18;
-    --surface-2: #2a2622;
-    --text: #ece6dc;
-    --muted: #aba295;
-    --border: #38332c;
-    --field: #5f584d;
-    --accent: #ea9356;
-    --accent-text: #161412;
-    --code-bg: #100e0c;
-    --ok: #9ccb82;
-    --warn: #e3b866;
+    --bg: #111714;
+    --surface: #1a221d;
+    --surface-2: #243029;
+    --text: #e3eae2;
+    --muted: #9daaa1;
+    --border: #2c3830;
+    --field: #4e5c53;
+    --accent: #f28db9;
+    --accent-text: #111714;
+    --code-bg: #0b100d;
+    --ok: #9fcf87;
+    --warn: #e5c06c;
     --danger: #f0a39b;
     --danger-bg: #3a211e;
   }

@@ -7,6 +7,7 @@ on:
     paths:
       - "releases/*.xpi"
   workflow_dispatch:
+  workflow_call: # from release.yml after it commits a signed build (a bot push does not start workflows itself)
 
 permissions:
   contents: write
@@ -18,6 +19,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Find the newest signed build
         id: v
         run: |

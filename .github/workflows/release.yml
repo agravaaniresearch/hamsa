@@ -1,10 +1,16 @@
-name: Build and sign XPI
+name: Test, and sign on request
 
+# Every push: tests and the add-on linter.
+# Run by hand (Actions → "Test, and sign on request" → Run workflow): signs the version in
+# extension/manifest.json with Mozilla (unlisted), commits releases/hamsa-<version>.xpi and updates.json,
+# and that commit publishes the GitHub release (publish-release.yml). Needs the repository secrets
+# AMO_JWT_ISSUER and AMO_JWT_SECRET. Signing on your own computer works the same way: see DEPLOY.md.
 on:
   push:
     branches: [main]
     paths:
       - "extension/**"
+      - "test/**"
       - "package.json"
       - ".github/workflows/release.yml"
   workflow_dispatch:
@@ -17,73 +23,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+
+  sign:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
     runs-on: ubuntu-latest
     env:
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
-      - run: npm test
-      - run: npm run lint
-
-      # Every successful push gets a fresh, unique version (AMO rejects reused versions).
-      # The committed manifest keeps its major.minor; the patch is the CI run number.
-      - name: Set version
-        id: v
+      - name: Sign with Mozilla and write updates.json
         run: |
-          BASE=$(jq -r .version extension/manifest.json | cut -d. -f1-2)
-          VERSION="$BASE.${{ github.run_number }}"
-          jq --arg v "$VERSION" '.version = $v' extension/manifest.json > manifest.tmp
-          mv manifest.tmp extension/manifest.json
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Sign with Mozilla (unlisted, automatic)
-        if: env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != ''
+          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then echo "::error::Add the AMO_JWT_ISSUER and AMO_JWT_SECRET repository secrets first."; exit 1; fi
+          node scripts/release.mjs
+      - name: Commit the signed build
         run: |
-          npx web-ext sign \
-            --source-dir extension \
-            --artifacts-dir dist \
-            --channel unlisted \
-            --api-key "$AMO_JWT_ISSUER" \
-            --api-secret "$AMO_JWT_SECRET"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/*.xpi updates.json
+          git commit -m "Signed build $(jq -r .version extension/manifest.json)"
+          git push
 
-      - name: Build unsigned package (only when no signing keys are set)
-        if: env.AMO_JWT_ISSUER == '' || env.AMO_JWT_SECRET == ''
-        run: |
-          npm run build
-          echo "::warning::AMO_JWT_ISSUER / AMO_JWT_SECRET are not set, so this build is UNSIGNED and will not install in regular Firefox."
-
-      - name: Keep unsigned build as a workflow artifact (no release)
-        if: env.AMO_JWT_ISSUER == '' || env.AMO_JWT_SECRET == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: hamsa-unsigned
-          path: dist/*.zip
-
-      - name: Publish release
-        if: env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ steps.v.outputs.version }}"
-          if ls dist/*.xpi >/dev/null 2>&1; then
-            cp "$(ls dist/*.xpi | head -n1)" dist/hamsa.xpi
-            ASSETS="dist/hamsa.xpi"
-            NOTES="Signed build. Download hamsa.xpi, then in Firefox open about:addons, click the gear icon and choose Install Add-on From File."
-          else
-            cp "$(ls dist/*.zip | head -n1)" dist/hamsa-unsigned.zip
-            ASSETS="dist/hamsa-unsigned.zip"
-            NOTES="UNSIGNED build (signing keys missing). Only loads in Firefox Developer Edition or Nightly."
-          fi
-          gh release create "v$VERSION" $ASSETS \
-            --title "Hamsa $VERSION" \
-            --notes "$NOTES" \
-            --target "$GITHUB_SHA"
+  publish:
+    needs: sign
+    uses: ./.github/workflows/publish-release.yml

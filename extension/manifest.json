@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hamsa",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Filters Hacker News before any model sees it. Merges the front pages, scores every story and comment against your own bookmarks and tags, folds away flame wars, and says why each item survived. Summaries only on request, with your own key.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -20,7 +20,8 @@
           "bookmarksInfo",
           "authenticationInfo"
         ]
-      }
+      },
+      "update_url": "https://raw.githubusercontent.com/agravaaniresearch/hamsa/main/updates.json"
     }
   },
   "background": {
@@ -64,9 +65,14 @@
         "https://news.ycombinator.com/news*",
         "https://news.ycombinator.com/front*",
         "https://news.ycombinator.com/newest*",
-        "https://news.ycombinator.com/best*",
-        "https://news.ycombinator.com/ask*",
-        "https://news.ycombinator.com/show*"
+        "https://news.ycombinator.com/best",
+        "https://news.ycombinator.com/best?*",
+        "https://news.ycombinator.com/ask",
+        "https://news.ycombinator.com/ask?*",
+        "https://news.ycombinator.com/show",
+        "https://news.ycombinator.com/show?*",
+        "https://news.ycombinator.com/shownew*",
+        "https://news.ycombinator.com/asknew*"
       ],
       "js": [
         "content/common.js",

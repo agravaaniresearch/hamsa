@@ -73,23 +73,42 @@ export function mergeBackup(cur, inc) {
   return out;
 }
 
-// Firefox Sync allows about 100 KB in items of 8 KB: the backup (no keys, no reading log) is cut into
-// chunks, and the oldest likes and opened titles are trimmed until it fits.
-export function toSyncChunks(backup, { maxBytes = 90000, chunk = 7000 } = {}) {
+// Firefox Sync allows 102,400 bytes in all and 8,192 per item, counted as UTF-8 bytes of the key plus
+// JSON.stringify(value): every quote in the backup costs two bytes and a Devanagari letter three. The
+// backup (no keys, no reading log) is cut into items measured that way, and the oldest likes, opened
+// titles and dismissals are trimmed until the whole fits.
+const enc = new TextEncoder();
+const itemBytes = (key, value) => enc.encode(key).length + enc.encode(JSON.stringify(value)).length;
+
+function cut(text, budget) {
+  const parts = [];
+  let i = 0;
+  while (i < text.length) {
+    let n = Math.min(text.length - i, budget);
+    while (n > 1 && itemBytes("hamsa:999", text.slice(i, i + n)) > budget) n = Math.floor(n * 0.9);
+    // Never split a surrogate pair.
+    const code = text.charCodeAt(i + n - 1);
+    if (n > 1 && i + n < text.length && code >= 0xd800 && code <= 0xdbff) n -= 1;
+    parts.push(text.slice(i, i + n));
+    i += n;
+  }
+  return parts;
+}
+
+export function toSyncChunks(backup, { maxBytes = 95000, chunk = 7800 } = {}) {
   const b = JSON.parse(JSON.stringify(backup));
   delete b.reading_log; delete b.impressions; delete b.raindropToken;
   for (const p of b.providers || []) delete p.apiKey;
   b.includes_keys = false;
-  let text = JSON.stringify(b);
-  while (text.length > maxBytes) {
+  const total = (parts) => parts.reduce((a, x, i) => a + itemBytes(`hamsa:${i}`, x), 0) + 200; // + hamsa:meta
+  let parts = cut(JSON.stringify(b), chunk);
+  while (total(parts) > maxBytes) {
     const items = Object.entries(b.prefs?.items || {}).sort((x, y) => x[1].at - y[1].at);
     if (items.length > 50) { for (const [k] of items.slice(0, Math.ceil(items.length / 5))) delete b.prefs.items[k]; }
     else if ((b.opened?.titles || []).length > 20) b.opened.titles = b.opened.titles.slice(0, Math.floor(b.opened.titles.length / 2));
     else if ((b.dismissed || []).length > 20) b.dismissed = b.dismissed.slice(0, Math.floor(b.dismissed.length / 2));
     else break;
-    text = JSON.stringify(b);
+    parts = cut(JSON.stringify(b), chunk);
   }
-  const parts = [];
-  for (let i = 0; i < text.length; i += chunk) parts.push(text.slice(i, i + chunk));
   return parts;
 }

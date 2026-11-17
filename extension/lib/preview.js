@@ -14,7 +14,7 @@ export function quickPreview(url) {
   let u;
   try { u = new URL(url); } catch { return { url, error: "bad-url" }; }
   const host = u.hostname.replace(/^www\./, "");
-  if (/\.pdf($|\?)/i.test(u.pathname)) return { url, kind: "pdf", site: host, title: decodeURIComponent(u.pathname.split("/").pop() || "PDF"), description: "PDF document" };
+  if (/\.pdf($|\?)/i.test(u.pathname)) return { url, kind: "pdf", site: host, title: safeDecode(u.pathname.split("/").pop() || "PDF"), description: "PDF document" };
   if (host === "news.ycombinator.com") return { url, kind: "hn", site: "Hacker News", skip: true };
   if (/\.(png|jpe?g|gif|webp|avif)$/i.test(u.pathname)) return { url, kind: "image", site: host, image: url, title: u.pathname.split("/").pop() };
   const yt = host === "youtu.be" ? u.pathname.slice(1) : /(^|\.)youtube\.com$/.test(host) ? u.searchParams.get("v") : null;
@@ -62,4 +62,9 @@ export function slimPreview(p) {
   const out = {};
   for (const k of ["url", "final", "title", "description", "image", "icon", "site", "published", "author", "kind", "doi", "error", "status"]) if (p[k] != null && p[k] !== "") out[k] = p[k];
   return out;
+}
+
+// A file name with a broken %-escape must not fail the whole batch of previews.
+export function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
 }

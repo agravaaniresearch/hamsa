@@ -1,12 +1,13 @@
 /* Hamsa settings. Palette from shared/theme.css (Parshva's), plus illustration colours. */
 :root {
-  --rust: #b4531a; --rust-bg: #fbeee3; --ochre: #9a6a12; --ochre-bg: #f6ecd2; --olive: #5d6b2e; --olive-bg: #eef1e2; --plum: #6e3561; --plum-bg: #f6eaf2;
-  --card: #fffdf9; --shadow: 0 1px 2px rgba(38, 33, 27, .05), 0 8px 24px -12px rgba(38, 33, 27, .18);
-  --hero-a: #fbf2e7; --hero-b: #f3dfc8;
+  /* Kshira palette: the names are kept from 0.5 so the illustrations keep working. "rust" is now lotus. */
+  --rust: #a8326a; --rust-bg: #f6dfea; --ochre: #87620b; --ochre-bg: #f1e6c2; --olive: #36692c; --olive-bg: #ddebd5; --plum: #7a3557; --plum-bg: #f3e3ec;
+  --card: #fbfcf9; --shadow: 0 1px 2px rgba(29, 38, 32, .05), 0 8px 24px -12px rgba(29, 38, 32, .18);
+  --hero-a: #eef2ea; --hero-b: #e9d6e2;
 }
-:root[data-theme="dark"] { --rust-bg: #3a2418; --ochre-bg: #33291a; --olive-bg: #262b1b; --plum-bg: #33222f; --card: #1e1b18; --shadow: none; --hero-a: #211c17; --hero-b: #2b221a; --rust: #ea9356; --ochre: #e0b65e; --olive: #b6c47c; --plum: #e0b0d4; }
+:root[data-theme="dark"] { --rust-bg: #3a1e2c; --ochre-bg: #322a16; --olive-bg: #1e3020; --plum-bg: #33222f; --card: #161d19; --shadow: none; --hero-a: #141b17; --hero-b: #2a1c25; --rust: #f28db9; --ochre: #e5c06c; --olive: #9fcf87; --plum: #e9b3cf; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --rust-bg: #3a2418; --ochre-bg: #33291a; --olive-bg: #262b1b; --plum-bg: #33222f; --card: #1e1b18; --shadow: none; --hero-a: #211c17; --hero-b: #2b221a; --rust: #ea9356; --ochre: #e0b65e; --olive: #b6c47c; --plum: #e0b0d4; }
+  :root:not([data-theme="light"]) { --rust-bg: #3a1e2c; --ochre-bg: #322a16; --olive-bg: #1e3020; --plum-bg: #33222f; --card: #161d19; --shadow: none; --hero-a: #141b17; --hero-b: #2a1c25; --rust: #f28db9; --ochre: #e5c06c; --olive: #9fcf87; --plum: #e9b3cf; }
 }
 
 html { scroll-behavior: smooth; scroll-padding-top: 24px; }
@@ -17,9 +18,9 @@ code { font: .9em var(--mono); background: var(--code-bg); padding: .1em .35em; 
 /* ---------- hero ---------- */
 .hero { background: radial-gradient(1200px 400px at 80% -10%, var(--hero-b), transparent 60%), linear-gradient(180deg, var(--hero-a), var(--bg)); border-bottom: 1px solid var(--border); }
 .hero-in { position: relative; max-width: 1180px; margin: 0 auto; padding: 36px 28px 30px; display: flex; gap: 28px; align-items: center; }
-.hero-art { width: 300px; flex: none; filter: drop-shadow(0 10px 18px rgba(120, 70, 30, .15)); }
+.hero-art { width: 300px; flex: none; filter: drop-shadow(0 10px 18px rgba(29, 38, 32, .15)); }
 .hero-text { flex: 1; min-width: 0; }
-.eyebrow { margin: 0 0 6px; font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--rust); }
+.eyebrow { margin: 0 0 6px; font: 600 13px/1 var(--font); color: var(--rust); }
 .hero h1 { margin: 0 0 10px; font: 600 40px/1.1 "Hamsa Literata", Georgia, serif; letter-spacing: -.01em; }
 .hero .lede { margin: 0 0 16px; max-width: 640px; font-size: 16px; color: var(--muted); }
 .hero-theme { position: absolute; top: 18px; right: 22px; }
@@ -198,4 +199,4 @@ details.card > summary { font-weight: 600; color: var(--text); margin: 0; }
 .toast.bad { border-color: var(--danger); background: var(--danger-bg); } .toast.bad .ticon { background: var(--danger); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .switch span, .switch span::after { transition: none; } }
 
-.linkbtn { border: 0; background: none; padding: 0; color: var(--accent, #b4531a); text-decoration: underline; cursor: pointer; font: inherit; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--accent, #a8326a); text-decoration: underline; cursor: pointer; font: inherit; }

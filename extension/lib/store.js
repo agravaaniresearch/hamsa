@@ -1,5 +1,6 @@
 import { SCORING_DEFAULTS } from "./score.js";
 import { emptyBlocklist } from "./blocklist.js";
+import { bigGet, bigSet } from "./idb.js";
 
 export const api = globalThis.browser ?? globalThis.chrome;
 
@@ -61,10 +62,13 @@ export const DEFAULT_SETTINGS = {
   thumbsDefault: false,
 };
 
-// Everything except the tag graph and the summary cache, which can run to megabytes. The background
-// keeps the graph in memory (see loadGraph in background.js); pages never need it.
-export async function getState() {
-  const s = await api.storage.local.get({ providers: [], settings: {}, profile: null, blocklist: null, dismissed: [], raindropToken: "", usage: {}, usageDaily: {} });
+// Settings and the small state. The tag graph, caches and logs live in IndexedDB (idb.js). The
+// interest profile can run to hundreds of KB, so the background asks for it separately and keeps it
+// in memory (withProfile: false).
+export async function getState({ withProfile = true } = {}) {
+  const want = { providers: [], settings: {}, blocklist: null, dismissed: [], raindropToken: "", usage: {}, usageDaily: {} };
+  if (withProfile) want.profile = null;
+  const s = await api.storage.local.get(want);
   const raw = { ...(s.settings || {}) };
   if (raw.font === "serif") raw.font = "source-serif"; // 0.2 values
   if (raw.font === "mono") raw.font = "plex-mono";
@@ -74,9 +78,16 @@ export async function getState() {
 }
 export const save = (obj) => api.storage.local.set(obj);
 
-export async function patchSettings(patch) {
-  const { settings = {} } = await api.storage.local.get("settings");
-  await api.storage.local.set({ settings: { ...settings, ...patch } });
+// Settings are read, changed and written back, so two changes at once could lose one. Every change made
+// on this page or in the background goes through one queue.
+let settingsQueue = Promise.resolve();
+export function patchSettings(patch) {
+  const run = settingsQueue.then(async () => {
+    const { settings = {} } = await api.storage.local.get("settings");
+    await api.storage.local.set({ settings: { ...settings, ...patch } });
+  });
+  settingsQueue = run.catch(() => {});
+  return run;
 }
 
 export function newProvider(preset) {
@@ -86,14 +97,14 @@ export function newProvider(preset) {
 // Cached summaries by thread id, so re-opening a thread costs nothing. Oldest entries go first.
 const CACHE_MAX = 60;
 export async function cacheGet(id) {
-  const { cache = {} } = await api.storage.local.get("cache");
+  const cache = await bigGet("cache", {});
   return cache[id] || null;
 }
 export async function cachePut(id, entry) {
-  const { cache = {} } = await api.storage.local.get("cache");
+  const cache = { ...(await bigGet("cache", {})) };
   cache[id] = { ...entry, at: Date.now() };
   for (const k of Object.keys(cache).sort((a, b) => cache[a].at - cache[b].at).slice(0, Math.max(0, Object.keys(cache).length - CACHE_MAX))) delete cache[k];
-  await api.storage.local.set({ cache });
+  await bigSet("cache", cache);
 }
 
 export const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

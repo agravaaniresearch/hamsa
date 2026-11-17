@@ -126,8 +126,8 @@ async function initReadingLog() {
   box.checked = state.settings.readingLog !== false;
   box.addEventListener("change", async () => { await patchSettings({ readingLog: box.checked }); notify("ok", box.checked ? "Hamsa will remember what you open" : "Reading log paused", box.checked ? "It stays in this browser." : "Nothing new is recorded; what is there stays until you clear it."); });
   const count = async () => {
-    const { readingLog = [], impressions = {} } = await api.storage.local.get(["readingLog", "impressions"]);
-    $("log-count").textContent = `${readingLog.length.toLocaleString()} opened, ${Object.keys(impressions).length.toLocaleString()} stories seen.`;
+    const n = await send({ type: "log-count" }).catch(() => ({ opened: 0, seen: 0 }));
+    $("log-count").textContent = `${n.opened.toLocaleString()} opened, ${n.seen.toLocaleString()} stories seen.`;
   };
   await count();
   $("log-export").addEventListener("click", async () => {
@@ -172,7 +172,13 @@ async function initSources() {
   $("rd-token").addEventListener("change", (e) => save({ raindropToken: e.target.value.trim() }));
   $("rd-eye").addEventListener("click", () => { const i = $("rd-token"); i.type = i.type === "password" ? "text" : "password"; $("rd-eye").textContent = i.type === "password" ? "Show" : "Hide"; });
   $("hn-user").value = state.settings.hnUser || "";
-  $("hn-user").addEventListener("change", (e) => patchSettings({ hnUser: e.target.value.trim() }));
+  $("hn-user").addEventListener("change", async (e) => {
+    const user = e.target.value.trim();
+    await patchSettings({ hnUser: user });
+    // The automatic login follows the user name; the saved password stays until you type a new one.
+    await send({ type: "hn-login-save", user, pass: null, auto: null }).catch(() => {});
+  });
+  await initHnLogin();
 
   $("bm-file").addEventListener("change", async (e) => {
     const f = e.target.files?.[0];
@@ -203,6 +209,36 @@ async function initSources() {
   });
   api.runtime.onMessage.addListener((m) => { if (m?.type === "sync-progress") $("sync-status").textContent = `Reading ${m.source}… ${m.n.toLocaleString()}`; });
   await drawCounts();
+}
+
+// HN login: the password stays in storage.local under hnLogin, which no backup or sync ever reads.
+async function initHnLogin() {
+  const auto = $("hn-auto"), pass = $("hn-pass"), badge = $("hn-login-state");
+  const draw = async () => {
+    const st = await send({ type: "hn-login-state" }).catch(() => ({}));
+    auto.checked = !!st.auto;
+    pass.value = st.hasPass ? "••••••••" : "";
+    pass.dataset.saved = st.hasPass ? "1" : "";
+    const TEXT = { ok: "logged in", bad: "wrong password", captcha: "captcha: log in by hand", paused: "paused after logout", error: "could not reach HN" };
+    badge.textContent = st.auto && st.status ? TEXT[st.status] || st.status : "";
+    badge.className = `badge${st.status === "ok" ? " ok" : ""}`;
+    badge.hidden = !badge.textContent;
+  };
+  const store = async () => {
+    const user = $("hn-user").value.trim();
+    const typed = pass.value && pass.value !== "••••••••" ? pass.value : null;
+    if (auto.checked && !user) { auto.checked = false; return notify("warn", "Add your HN user name first", "It goes in the box above."); }
+    if (auto.checked && !typed && !pass.dataset.saved) { auto.checked = false; return notify("warn", "Add your HN password first"); }
+    await patchSettings({ hnUser: user });
+    await send({ type: "hn-login-save", user, pass: typed, auto: auto.checked });
+    notify("ok", auto.checked ? "Automatic HN login on" : "Automatic HN login off", auto.checked ? "Open any HN page while logged out to try it." : "");
+    await draw();
+  };
+  auto.addEventListener("change", store);
+  pass.addEventListener("focus", () => { if (pass.value === "••••••••") pass.value = ""; });
+  pass.addEventListener("change", () => { if (pass.value) { auto.checked = true; store(); } });
+  $("hn-eye").addEventListener("click", () => { pass.type = pass.type === "password" ? "text" : "password"; $("hn-eye").textContent = pass.type === "password" ? "Show" : "Hide"; });
+  await draw();
 }
 
 // Pinboard and similar JSON exports: [{ href|url|link, description|title, tags: "a b" | [..] }]
@@ -370,21 +406,26 @@ async function persistProviders() { await save({ providers: state.providers }); 
 function renderProviders() {
   const box = $("providers");
   if (!state.providers.length) { box.replaceChildren(h("p", { class: "status" }, "No providers yet. Pick one below and add your key.")); return; }
-  box.replaceChildren(...state.providers.map((p) => {
+  box.replaceChildren(...state.providers.map((p0) => {
+    // Handlers look the provider up again when they run: state is reloaded elsewhere on this page, and
+    // an object captured at render time would be written back stale (0.5 lost the first key you pasted).
+    const live = () => state.providers.find((x) => x.id === p0.id) || p0;
+    const p = p0;
     const ks = p.keyStatus && p.keyStatus.sig === keySig(p) ? p.keyStatus : null;
     const status = h("span", { class: `badge ${ks ? (ks.state === "ok" || ks.state === "unverified" ? "ok" : "bad") : ""}` }, ks ? ks.message : "Not tested");
     const models = h("div", { class: "models" }, (p.knownModels || p.models || []).slice(0, 80).map((m) =>
-      h("label", {}, h("input", { type: "checkbox", checked: (p.models || []).includes(m), onchange: async (e) => { p.models = e.target.checked ? [...new Set([...(p.models || []), m])] : (p.models || []).filter((x) => x !== m); await persistProviders(); } }), m)));
-    const custom = h("input", { type: "text", placeholder: "Add a model id by hand, then press Enter", onkeydown: async (e) => { if (e.key === "Enter" && e.target.value.trim()) { const m = e.target.value.trim(); p.knownModels = [...new Set([...(p.knownModels || []), m])]; p.models = [...new Set([...(p.models || []), m])]; await persistProviders(); renderProviders(); } } });
-    const key = h("input", { type: "password", value: p.apiKey || "", autocomplete: "off", spellcheck: "false", "aria-label": `${p.name} API key`, onchange: async (e) => { p.apiKey = e.target.value.trim(); await persistProviders(); renderProviders(); } });
+      h("label", {}, h("input", { type: "checkbox", checked: (p.models || []).includes(m), onchange: async (e) => { const p = live(); p.models = e.target.checked ? [...new Set([...(p.models || []), m])] : (p.models || []).filter((x) => x !== m); await persistProviders(); } }), m)));
+    const custom = h("input", { type: "text", placeholder: "Add a model id by hand, then press Enter", onkeydown: async (e) => { const p = live(); if (e.key === "Enter" && e.target.value.trim()) { const m = e.target.value.trim(); p.knownModels = [...new Set([...(p.knownModels || []), m])]; p.models = [...new Set([...(p.models || []), m])]; await persistProviders(); renderProviders(); } } });
+    const key = h("input", { type: "password", value: p.apiKey || "", autocomplete: "off", spellcheck: "false", "aria-label": `${p.name} API key`, onchange: async (e) => { const p = live(); p.apiKey = e.target.value.trim(); await persistProviders(); renderProviders(); } });
     return h("div", { class: "prov" },
       h("div", { class: "head" }, h("strong", {}, p.name), status, h("button", { class: "danger", type: "button", onclick: async () => { state.providers = state.providers.filter((x) => x.id !== p.id); await persistProviders(); renderProviders(); } }, "Remove")),
       h("div", { class: "grid", style: "margin-top:0" },
-        h("label", { class: "field" }, h("span", {}, "Name"), h("input", { type: "text", value: p.name, onchange: async (e) => { p.name = e.target.value; await persistProviders(); } })),
-        h("label", { class: "field" }, h("span", {}, `Base URL (${p.kind})`), h("input", { type: "text", value: p.baseUrl, onchange: async (e) => { p.baseUrl = e.target.value.trim(); await persistProviders(); renderProviders(); } }))),
+        h("label", { class: "field" }, h("span", {}, "Name"), h("input", { type: "text", value: p.name, onchange: async (e) => { const p = live(); p.name = e.target.value; await persistProviders(); } })),
+        h("label", { class: "field" }, h("span", {}, `Base URL (${p.kind})`), h("input", { type: "text", value: p.baseUrl, onchange: async (e) => { const p = live(); p.baseUrl = e.target.value.trim(); await persistProviders(); renderProviders(); } }))),
       h("div", { class: "keyrow" }, key, h("button", { class: "secondary eye", type: "button", onclick: (e) => { key.type = key.type === "password" ? "text" : "password"; e.target.textContent = key.type === "password" ? "Show" : "Hide"; } }, "Show")),
       h("div", { class: "row" }, h("button", { class: "secondary", type: "button", onclick: async (e) => {
         e.target.textContent = "Testing…";
+        const p = live();
         try {
           if (p.baseUrl && !/localhost|127\.0\.0\.1/.test(p.baseUrl)) { try { await api.permissions.request({ origins: [originPattern(p.baseUrl)] }); } catch { /* already granted */ } }
           const r = await send({ type: "test-key", id: p.id });
@@ -460,8 +501,8 @@ async function drawLikes() {
   const nl = items.filter(([, x]) => x.v === "like").length, nd = items.length - nl;
   $("likes-count").textContent = items.length ? `${nl} liked, ${nd} disliked${items.some(([, x]) => x.source === "hn") ? `, ${items.filter(([, x]) => x.source === "hn").length} of them read from your HN votes` : ""}.` : "None yet. Use the thumbs on any story or comment.";
   $("likes-list").replaceChildren(...items.slice(0, 80).map(([id, x]) => h("div", { class: "like-row" },
-    h("span", { class: `pill ${x.v}` }, x.v === "like" ? "LIKE" : "DISLIKE"),
-    h("a", { class: "lt", href: `https://news.ycombinator.com/item?id=${id}`, target: "_blank", rel: "noopener noreferrer", title: x.title }, x.title || `${x.kind} ${id}`),
+    h("span", { class: `pill ${x.v}` }, x.v === "like" ? "Like" : "Dislike"),
+    h("a", { class: "lt", href: id.startsWith("link:") ? (x.url || id.slice(5)) : `https://news.ycombinator.com/item?id=${id}`, target: "_blank", rel: "noopener noreferrer", title: x.title }, x.title || `${x.kind} ${id}`),
     h("span", { class: "status" }, x.source === "hn" ? "from HN" : x.kind),
     h("button", { type: "button", title: "Forget this", "aria-label": "Forget this", onclick: async () => { await send({ type: "pref", item: { id, kind: x.kind }, value: null }); drawLikes(); drawStatus(); } }, "×"))));
   $("likes-clear").onclick = async () => { await send({ type: "prefs-clear" }); notify("ok", "Likes and dislikes cleared"); drawLikes(); drawStatus(); };

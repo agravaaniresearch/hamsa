@@ -40,6 +40,8 @@
     bg: [["rect", { x: 3, y: 7, width: 13, height: 13, rx: 2 }], ["path", { d: "M8 3h13v13" }], ["path", { d: "M14 10l7-7" }]],
     like: [["path", { d: "M7 11v9H4v-9zM7 11l4-7c1.3 0 2.3 1 2 2.4L12.4 10H18a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 16.7 20H7" }]],
     dislike: [["path", { d: "M7 11v9H4v-9zM7 11l4-7c1.3 0 2.3 1 2 2.4L12.4 10H18a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 16.7 20H7", transform: "rotate(180 12 12)" }]],
+    chat: [["path", { d: "M4 5h16v11H10l-6 4z" }], ["path", { d: "M14 9l3 3-3 3" }]],
+    hide: [["path", { d: "M6 6l12 12M18 6L6 18" }]],
     compass: [["circle", { cx: 12, cy: 12, r: 9 }], ["path", { d: "M15.5 8.5l-2 5-5 2 2-5z", fill: "currentColor" }]],
   };
   function icon(name, size = 18) {
@@ -178,11 +180,14 @@
   }
 
   // ---- score pieces ----
-  const BUCKET_LABEL = { keep: "KEEP", maybe: "MAYBE", stretch: "DISCOVER", toss: "TOSS", removed: "REMOVED" };
-  const badge = (bucket, score) => h("span", { class: `h-badge ${bucket}` }, score != null && bucket !== "removed" ? `${score.toFixed(2)} · ${BUCKET_LABEL[bucket]}` : BUCKET_LABEL[bucket]);
-  function bar(bucket, score) {
-    const b = h("span", { class: `h-bar ${bucket}`, role: "img", "aria-label": `Relevance ${score.toFixed(2)} of 1` }, h("i"));
-    b.firstChild.style.width = `${Math.round(Math.max(0.02, Math.min(1, score)) * 100)}%`;
+  const BUCKET_LABEL = { keep: "keep", maybe: "maybe", stretch: "discover", toss: "toss", removed: "removed" };
+  const badge = (bucket, score) => h("span", { class: `h-badge ${bucket}` }, score != null && bucket !== "removed" ? `${BUCKET_LABEL[bucket]} ${score.toFixed(2)}` : BUCKET_LABEL[bucket]);
+  function bar(bucket, score, keepAt = 0.55) {
+    const x = Math.max(0.02, Math.min(1, score || 0));
+    const b = h("span", { class: `h-bar heat ${bucket}`, role: "img", "aria-label": `Relevance ${(score || 0).toFixed(2)} of 1`, title: `Relevance ${(score || 0).toFixed(2)} · keep line ${keepAt}` }, h("i"));
+    b.firstChild.style.width = `${Math.round(x * 100)}%`;
+    b.style.setProperty("--s", String(x));
+    b.style.setProperty("--k", String(keepAt));
     return b;
   }
   // The full reasoning: each signal with its points, the total and how it became 0 to 1.
@@ -198,7 +203,22 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // Fetch further HN pages from the page itself, so your login (and vote links) carry over.
-  async function fetchMore(startHref, max, onPage) {
+  // The extra pages are kept for three minutes in this tab, so going back to the front page from a
+  // thread does not read four more pages from HN again.
+  const MORE_TTL = 3 * 60e3;
+  async function fetchMore(startHref, max, onPage, { cache = false } = {}) {
+    if (!cache) return fetchPages(startHref, max, onPage);
+    // Keyed by who is logged in, so vote arrows and your upvotes on later pages are never another login's.
+    const key = `hamsa:more:${document.getElementById("me")?.textContent || "-"}:${startHref}:${max}`;
+    try {
+      const hit = JSON.parse(sessionStorage.getItem(key) || "null");
+      if (hit && Date.now() - hit.at < MORE_TTL && hit.pages?.length) return hit.pages;
+    } catch { /* storage blocked or full */ }
+    const pages = await fetchPages(startHref, max, onPage);
+    try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), pages })); } catch { /* too large or blocked: fine */ }
+    return pages;
+  }
+  async function fetchPages(startHref, max, onPage) {
     const pages = [];
     let href = startHref;
     for (let i = 0; i < max && href; i++) {
@@ -273,7 +293,17 @@
 
   // ---- link previews: a card for a link, fetched by the background page when it scrolls near ----
   const linkId = (url) => "link:" + String(url).replace(/#.*$/, "").replace(/\/$/, "");
-  const pv = { queue: [], busy: 0, blocked: false, off: false, io: null, ctx: {} };
+  const pvCtx = new WeakMap();
+  const pv = { queue: [], busy: 0, blocked: false, off: false, io: null, ctx: {}, pending: new Set() };
+  // Called right after a redraw has replaced the cards: slots from the last draw must not stay observed
+  // or queued, or each one keeps its whole old card tree alive (0.5 grew ~0.6 MB per redraw).
+  function pvSweep() {
+    if (pv.io) { pv.io.disconnect(); pv.io = null; }
+    pv.queue = pv.queue.filter((el) => el.isConnected);
+    // The fresh observer watches only slots on the page now (the new cards' slots included).
+    const io = pvObserver();
+    if (io) for (const el of document.querySelectorAll("#hamsa-root .h-pv.loading[data-url]")) if (!pv.pending.has(el) && !pv.queue.includes(el)) io.observe(el);
+  }
   function pvObserver() {
     if (pv.io || typeof IntersectionObserver === "undefined") return pv.io;
     pv.io = new IntersectionObserver((entries) => {
@@ -284,26 +314,30 @@
   }
   function pvPump() {
     while (pv.busy < 4 && pv.queue.length) {
-      const batch = pv.queue.splice(0, 4);
+      const batch = pv.queue.splice(0, 4).filter((el) => el.isConnected);
+      if (!batch.length) continue;
+      for (const el of batch) pv.pending.add(el);
       pv.busy++;
-      send({ type: "previews", urls: batch.map((el) => el.dataset.url) }, 1).then((r) => {
-        if (r.needPermission) { pv.blocked = true; for (const el of [...batch, ...pv.queue]) el.remove(); pv.queue = []; document.dispatchEvent(new CustomEvent("hamsa-previews-blocked")); return; }
-        if (r.off) { pv.off = true; for (const el of [...batch, ...pv.queue]) el.remove(); pv.queue = []; return; }
-        for (const el of batch) drawPreview(el, r.previews?.[el.dataset.url]);
-      }).catch(() => { for (const el of batch) el.remove(); }).finally(() => { pv.busy--; pvPump(); });
+      send({ type: "previews", urls: batch.map((el) => el.dataset.url) }, 3).then((r) => {
+        if (r.needPermission) { pv.blocked = true; for (const el of [...batch, ...pv.queue]) { el.dataset.dead = "1"; el.remove(); } pv.queue = []; document.dispatchEvent(new CustomEvent("hamsa-previews-blocked")); return; }
+        if (r.off) { pv.off = true; for (const el of [...batch, ...pv.queue]) { el.dataset.dead = "1"; el.remove(); } pv.queue = []; return; }
+        for (const el of batch) if (el.isConnected) drawPreview(el, r.previews?.[el.dataset.url]);
+      }).catch(() => { for (const el of batch) { el.dataset.dead = "1"; el.remove(); } }).finally(() => { for (const el of batch) { pv.pending.delete(el); } pv.busy--; pvPump(); });
     }
   }
   function previewSlot(url, ctx = {}) {
     if (pv.blocked || pv.off || !/^https?:/i.test(url || "")) return null;
     const el = h("div", { class: "h-pv loading", "data-url": url, "aria-busy": "true" }, h("div", { class: "h-pv-skel" }));
-    el._ctx = ctx;
+    pvCtx.set(el, ctx); // a WeakMap, not an expando on the element: expandos on page nodes can outlive them
     const io = pvObserver();
     if (io) io.observe(el); else { pv.queue.push(el); pvPump(); }
     return el;
   }
   function drawPreview(el, p) {
-    if (!p || p.error || p.skip || (!p.title && !p.description && !p.image)) { el.remove(); return; }
-    const ctx = el._ctx || {};
+    if (!p || p.error || p.skip || (!p.title && !p.description && !p.image)) { el.dataset.dead = "1"; el.remove(); return; }
+    if (el.dataset.drawn) return;
+    el.dataset.drawn = "1";
+    const ctx = pvCtx.get(el) || {};
     const url = el.dataset.url;
     const host = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
     const date = p.published ? (() => { const d = new Date(p.published); return isNaN(d) ? null : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); })() : null;
@@ -328,5 +362,8 @@
       h("div", { class: "h-pv-act" }, thumbs(item, state))].filter(Boolean));
   }
 
-  globalThis.HamsaUI = { api, h, fill, icon, send, fail, logError, track, openTab, thumbs, previewSlot, linkId, pv, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
+  globalThis.HamsaUI = { api, h, fill, pvSweep, icon, send, fail, logError, track, openTab, thumbs, previewSlot, linkId, pv, applyTheme, release, mount, showOriginal, header, setUsage, toast, badge, bar, whyPanel, fetchMore, watch, usageText, fmtNum, sleep, BUCKET_LABEL };
 })();
+
+// A vote changes what later front pages show: drop the cached pages.
+globalThis.HamsaUI && (globalThis.HamsaUI.dropMore = () => { try { for (const k of Object.keys(sessionStorage)) if (k.startsWith("hamsa:more:")) sessionStorage.removeItem(k); } catch { /* blocked */ } });

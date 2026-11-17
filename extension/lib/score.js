@@ -11,7 +11,7 @@
 import { tokenize, words } from "./tokenize.js";
 
 export const SCORE_SCHEMA = "hamsa.score/1";
-export const RULES_VERSION = "0.5";
+export const RULES_VERSION = "0.6";
 
 export const SCORING_DEFAULTS = {
   ceiling: 0.9,          // a total of this much reaches about 0.86

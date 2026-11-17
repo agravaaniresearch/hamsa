@@ -97,7 +97,7 @@ function render() {
       h("h2", {}, "Start with a thumbs up"),
       h("p", {}, "On Hacker News, press the thumbs up on any story, comment or link preview you find worth keeping. Stories you upvote on HN count too. Each like comes back here for another look a day later, then after 3, 7, 16, 35, 90 and 180 days while you still find it useful, and teaches the digest what to pick from tomorrow's front page."),
       h("a", { class: "btnlink primary", href: `${HN}news` }, "Go to Hacker News")));
-    $("body").querySelector(".art").innerHTML = '<svg viewBox="0 0 80 60" width="96" height="72" aria-hidden="true"><path d="M14 30h10v22H14z" fill="#f3e5bd" stroke="#7d5a0c" stroke-width="2"/><path d="M24 50h24c4 0 6-3 7-6l5-14c1-4-1-7-5-7H42l2-9c1-4-2-7-5-7l-15 20z" fill="#fffaf3" stroke="#b4531a" stroke-width="2" stroke-linejoin="round"/><path d="M62 10l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#6e3561"/></svg>';
+    $("body").querySelector(".art").innerHTML = '<svg viewBox="0 0 80 60" width="96" height="72" aria-hidden="true"><path d="M14 30h10v22H14z" fill="#f1e6c2" stroke="#87620b" stroke-width="2"/><path d="M24 50h24c4 0 6-3 7-6l5-14c1-4-1-7-5-7H42l2-9c1-4-2-7-5-7l-15 20z" fill="#fbfcf9" stroke="#a8326a" stroke-width="2" stroke-linejoin="round"/><path d="M62 10l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#a8326a"/></svg>';
     return foot();
   }
   const lib = d.library;

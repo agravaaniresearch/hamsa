@@ -9,26 +9,31 @@ html.hamsa-on body { margin: 0; background: var(--h-bg); color: var(--h-text); }
 html.hamsa-on body > center { display: block; }
 
 html.hamsa-on, html.hamsa-pending, html.hamsa-skin {
-  --h-bg: #faf7f2; --h-surface: #f1ece3; --h-surface-2: #e9e2d5; --h-card: #fffdf9;
-  --h-text: #26211b; --h-muted: #6f6457; --h-border: #e2dacb; --h-field: #b9ad99;
-  --h-accent: #b4531a; --h-accent-text: #fff8f0; --h-head: #26211b; --h-head-text: #f6f0e6; --h-head-line: transparent;
-  --h-keep: #2f6a3a; --h-keep-bg: #dcebdc; --h-maybe: #7d5a0c; --h-maybe-bg: #f3e5bd;
-  --h-stretch: #6e3561; --h-stretch-bg: #eedbe8; --h-toss: #6f6457; --h-toss-bg: #ebe5da;
-  --h-danger: #a3261f; --h-danger-bg: #f7e1dd; --h-shadow: 0 1px 2px rgba(38, 33, 27, .06);
+  /* Kshira (milk): jade-white paper, pond-green ink, lotus for what you would not have found yourself. */
+  --h-bg: #f3f5ef; --h-surface: #e8ece4; --h-surface-2: #dce2d7; --h-card: #fbfcf9;
+  --h-text: #1d2620; --h-muted: #5e6a62; --h-border: #d3dacf; --h-field: #a9b4aa;
+  --h-accent: #a8326a; --h-accent-text: #fff6fa; --h-head: #1d2620; --h-head-text: #eef2ec; --h-head-dim: #b9c4bc; --h-head-line: #a8326a;
+  --h-keep: #36692c; --h-keep-bg: #ddebd5; --h-maybe: #7a5807; --h-maybe-bg: #f1e6c2;
+  --h-stretch: #a8326a; --h-stretch-bg: #f6dfea; --h-toss: #5a645e; --h-toss-bg: #e4e8e1;
+  --h-danger: #a3261f; --h-danger-bg: #f7e1dd; --h-shadow: 0 1px 2px rgba(29, 38, 32, .06);
+  /* The relevance strip: silt (water) through turmeric to lotus leaf. */
+  --h-heat: linear-gradient(90deg, #a9b4aa 0%, #c9a43c 38%, #6f9a3a 62%, #2f6a2a 100%);
   --h-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --h-mono: "Hamsa Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --h-font: var(--h-sans); --h-title: var(--h-font);
   --h-size: 14.5px; --h-width: 1180px; --h-gap: 12px; --h-pad: 14px;
   color-scheme: light;
 }
-/* Dark: Hamsa works out light or dark itself (theme setting plus your system), then picks one of three styles. */
+/* Dark: Hamsa works out light or dark itself (theme setting plus your system), then picks one of three styles.
+   The default is Pond: the lotus pond at night. */
 html[data-hamsa-mode="dark"] {
-  --h-bg: #161412; --h-surface: #25221e; --h-surface-2: #302c27; --h-card: #1e1b18;
-  --h-text: #ece6dc; --h-muted: #aba295; --h-border: #38332c; --h-field: #5f584d;
-  --h-accent: #ea9356; --h-accent-text: #161412; --h-head: #0f0e0c; --h-head-text: #ece6dc; --h-head-line: #2b2722;
-  --h-keep: #9fd18a; --h-keep-bg: #24321f; --h-maybe: #e8c172; --h-maybe-bg: #352c1a;
-  --h-stretch: #e3b2d6; --h-stretch-bg: #352331; --h-toss: #a39a8d; --h-toss-bg: #27241f;
+  --h-bg: #111714; --h-surface: #1a221d; --h-surface-2: #243029; --h-card: #161d19;
+  --h-text: #e3eae2; --h-muted: #9daaa1; --h-border: #2c3830; --h-field: #4e5c53;
+  --h-accent: #f28db9; --h-accent-text: #111714; --h-head: #0b100d; --h-head-text: #e3eae2; --h-head-dim: #a3b0a7; --h-head-line: #7a3557;
+  --h-keep: #9fcf87; --h-keep-bg: #1e3020; --h-maybe: #e5c06c; --h-maybe-bg: #322a16;
+  --h-stretch: #f28db9; --h-stretch-bg: #3a1e2c; --h-toss: #98a49c; --h-toss-bg: #1e2621;
   --h-danger: #f0a39b; --h-danger-bg: #3a211e; --h-shadow: none;
+  --h-heat: linear-gradient(90deg, #4e5c53 0%, #b8913a 38%, #7fb35a 62%, #a6dc8a 100%);
   color-scheme: dark;
 }
 html[data-hamsa-mode="dark"][data-hamsa-dark="neutral"] {
@@ -61,6 +66,7 @@ html[data-hamsa-size="l"] { --h-size: 16px; }
 html[data-hamsa-size="xl"] { --h-size: 17.5px; }
 html[data-hamsa-width="narrow"] { --h-width: 880px; }
 html[data-hamsa-width="wide"] { --h-width: 1480px; }
+html[data-hamsa-width="full"] { --h-width: min(2600px, 96vw); }
 html[data-hamsa-density="compact"] { --h-gap: 7px; --h-pad: 10px; }
 html[data-hamsa-justify="on"] .h-cbody, html[data-hamsa-justify="on"] .h-toptext, html.hamsa-skin[data-hamsa-justify="on"] .commtext { text-align: justify; hyphens: auto; }
 
@@ -72,17 +78,17 @@ html[data-hamsa-justify="on"] .h-cbody, html[data-hamsa-justify="on"] .h-toptext
 #hamsa-root [hidden] { display: none !important; }
 
 /* header */
-.h-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; padding: 0 20px; min-height: 52px; background: var(--h-head); color: var(--h-head-text); flex-wrap: wrap; border-bottom: 1px solid var(--h-head-line); }
+.h-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; padding: 0 20px; min-height: 52px; background: var(--h-head); color: var(--h-head-text); flex-wrap: wrap; border-bottom: 2px solid var(--h-head-line); }
 .h-brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; letter-spacing: .01em; text-decoration: none; color: var(--h-head-text) !important; }
 .h-brand img { width: 24px; height: 24px; border-radius: 6px; }
 .h-nav { display: flex; gap: 2px; flex-wrap: wrap; font-size: 13px; }
-.h-nav a { padding: 5px 8px; border-radius: 6px; text-decoration: none; color: #d8cfc1 !important; }
+.h-nav a { padding: 5px 8px; border-radius: 6px; text-decoration: none; color: var(--h-head-dim) !important; }
 .h-nav a:hover, .h-nav a.on { background: rgba(255, 255, 255, .1); color: #fff !important; }
 .h-grow { flex: 1; }
 .h-pill { font: 12px var(--h-mono); padding: 4px 10px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 999px; white-space: nowrap; color: var(--h-head-text); }
-.h-icon { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: #d8cfc1 !important; }
+.h-icon { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--h-head-dim) !important; }
 .h-icon:hover { background: rgba(255, 255, 255, .12); color: #fff !important; }
-.h-user { font-size: 13px; color: #d8cfc1 !important; text-decoration: none; }
+.h-user { font-size: 13px; color: var(--h-head-dim) !important; text-decoration: none; }
 
 /* layout */
 .h-wrap { max-width: var(--h-width); margin: 0 auto; padding: 24px 20px 64px; display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
@@ -95,8 +101,8 @@ html[data-hamsa-justify="on"] .h-cbody, html[data-hamsa-justify="on"] .h-toptext
 /* cards */
 .h-card { background: var(--h-card); border: 1px solid var(--h-border); border-radius: 12px; padding: var(--h-pad) calc(var(--h-pad) + 2px); box-shadow: var(--h-shadow); }
 .h-card.h-dim { opacity: .62; }
-.h-card.h-stretch-card { border-color: var(--h-stretch); border-style: solid; background: linear-gradient(90deg, var(--h-stretch-bg), var(--h-card) 55%); box-shadow: inset 4px 0 0 var(--h-stretch); position: relative; padding-top: 34px; }
-.h-ribbon { position: absolute; top: -1px; left: 14px; display: inline-flex; align-items: center; gap: 4px; background: var(--h-stretch); color: var(--h-card); font-weight: 700; font-size: 10.5px; line-height: 1; letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px 6px; border-radius: 0 0 6px 6px; }
+.h-card.h-stretch-card { border-color: color-mix(in srgb, var(--h-stretch) 45%, var(--h-border)); box-shadow: inset 4px 0 0 var(--h-stretch); position: relative; }
+.h-ribbon { position: absolute; top: -1px; left: 14px; display: inline-flex; align-items: center; gap: 4px; background: var(--h-stretch); color: var(--h-card); font-weight: 700; font-size: 11.5px; line-height: 1; letter-spacing: .01em; padding: 5px 9px 6px; border-radius: 0 0 6px 6px; }
 .h-topic { border: 1px solid var(--h-border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--h-surface); }
 .h-topic.new { border-style: dashed; }
 .h-topic-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding: 0 4px; }
@@ -107,7 +113,7 @@ html[data-hamsa-justify="on"] .h-cbody, html[data-hamsa-justify="on"] .h-toptext
 .h-ttitle { color: var(--h-text) !important; text-decoration: none; font-weight: 600; flex: 1 1 260px; }
 .h-ttitle:hover { color: var(--h-accent) !important; }
 .h-panel { background: var(--h-surface); border: 1px solid var(--h-border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.h-label { font-size: 11.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--h-muted); }
+.h-label { font-size: 12.5px; font-weight: 650; color: var(--h-muted); }
 .h-kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
 .h-kv b { font: 500 13px var(--h-mono); }
 .h-sep { border-top: 1px solid var(--h-border); margin: 2px 0; }
@@ -122,7 +128,7 @@ html[data-hamsa-justify="on"] .h-cbody, html[data-hamsa-justify="on"] .h-toptext
 .h-chip.maybe { border-color: var(--h-maybe); background: var(--h-maybe-bg); color: var(--h-maybe); }
 .h-chip.stretch { border-color: var(--h-stretch); background: var(--h-stretch-bg); color: var(--h-stretch); }
 .h-chip.toss, .h-chip.removed { border-color: var(--h-field); background: var(--h-toss-bg); color: var(--h-toss); }
-.h-badge { flex: none; font: 600 11px var(--h-mono); letter-spacing: .05em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.h-badge { flex: none; font: 600 12px var(--h-sans); font-variant-numeric: tabular-nums; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .h-badge.keep { background: var(--h-keep-bg); color: var(--h-keep); }
 .h-badge.maybe { background: var(--h-maybe-bg); color: var(--h-maybe); }
 .h-badge.stretch { background: var(--h-stretch-bg); color: var(--h-stretch); }
@@ -149,6 +155,12 @@ button.h-tag { cursor: pointer; }
 .h-bar.keep > i { background: var(--h-keep); }
 .h-bar.maybe > i { background: var(--h-maybe); }
 .h-bar.stretch > i { background: var(--h-stretch); }
+/* Heat strip: the colour says where the score sits on the whole 0 to 1 scale, the tick marks the keep line. */
+.h-bar.heat { position: relative; background: var(--h-heat); height: 7px; }
+.h-bar.heat > i { display: none; }
+.h-bar.heat::after { content: ""; position: absolute; inset: 0 0 0 calc(var(--s, 0) * 100%); background: var(--h-surface-2); }
+.h-bar.heat::before { content: ""; position: absolute; z-index: 1; top: -2px; bottom: -2px; left: calc(var(--k, .55) * 100%); width: 2px; border-radius: 1px; background: var(--h-text); opacity: .55; }
+.h-bar.heat.stretch { box-shadow: 0 0 0 1.5px var(--h-stretch); }
 .h-num { font: 600 14px var(--h-mono); min-width: 34px; }
 .h-why { border: 1px solid var(--h-border); background: var(--h-surface); border-radius: 9px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
 .h-why .h-kv span:last-child { font-family: var(--h-mono); }
@@ -157,12 +169,12 @@ button.h-tag { cursor: pointer; }
 /* story cards */
 .h-story { display: flex; gap: 14px; }
 .h-rank { width: 26px; flex: none; font: 13px var(--h-mono); color: var(--h-muted); padding-top: 4px; text-align: right; }
-.h-sbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.h-sbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .h-shead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .h-stitle { font: 600 calc(var(--h-size) * 1.24)/1.3 var(--h-title); text-decoration: none; overflow-wrap: anywhere; }
 .h-stitle:visited { color: var(--h-muted) !important; }
 .h-stitle:hover { color: var(--h-accent) !important; }
-.h-meta { font-size: 12.5px; color: var(--h-muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.h-meta { font-size: 12.5px; color: var(--h-muted); display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: center; }
 .h-meta a { text-decoration: none; }
 .h-meta a:hover { text-decoration: underline; color: var(--h-accent) !important; }
 .h-vote { border: 0; background: none; padding: 0 4px; color: var(--h-muted); font-size: 12px; line-height: 1; }
@@ -218,7 +230,7 @@ button.h-tag { cursor: pointer; }
 .h-funnel .h-bar.sent > i { background: var(--h-keep); }
 
 /* floating pill on plain HN */
-#hamsa-back { position: fixed; z-index: 2147483000; right: 16px; bottom: 16px; padding: 9px 14px; border-radius: 999px; border: 0; background: #b4531a; color: #fff8f0; font: 600 13px system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); cursor: pointer; }
+#hamsa-back { position: fixed; z-index: 2147483000; right: 16px; bottom: 16px; padding: 9px 14px; border-radius: 999px; border: 0; background: #a8326a; color: #fff6fa; font: 600 13px system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); cursor: pointer; }
 
 /* toast */
 .h-toast { position: fixed; z-index: 30; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px; background: var(--h-head); color: var(--h-head-text); font-size: 13.5px; box-shadow: 0 10px 28px rgba(0, 0, 0, .3); }
@@ -256,7 +268,7 @@ button.h-tag { cursor: pointer; }
 
 /* 0.4: sections, thumbs */
 .h-section { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0 0; padding: 4px 2px; color: var(--h-muted); font-size: 13px; }
-.h-section strong { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--h-text); }
+.h-section strong { font: 650 calc(var(--h-size) * 1.12)/1.2 var(--h-title); color: var(--h-text); }
 .h-section svg { align-self: center; color: var(--h-stretch); }
 .h-section.stretch strong { color: var(--h-stretch); }
 .h-section.keep strong { color: var(--h-keep); }
@@ -274,7 +286,7 @@ button.h-tag { cursor: pointer; }
 .h-pv-media { display: block; background: var(--h-surface); }
 .h-pv-img { width: 132px; height: 100%; min-height: 88px; max-height: 132px; object-fit: cover; display: block; }
 .h-pv-body { padding: 9px 12px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.h-pv-site { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--h-muted); flex-wrap: wrap; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.h-pv-site { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--h-muted); flex-wrap: wrap; font-weight: 600; }
 .h-pv-ico { width: 14px; height: 14px; border-radius: 3px; }
 .h-pv-kind { font-weight: 700; color: var(--h-accent); }
 .h-pv-title { font-weight: 650; color: var(--h-text) !important; text-decoration: none; line-height: 1.3; font-family: var(--h-title); }
@@ -285,8 +297,8 @@ button.h-tag { cursor: pointer; }
 .h-stretch-card .h-pv { border-color: var(--h-stretch); }
 
 /* ---- people's colours: bright, one per person, no blue (amber takes its place) ---- */
-#hamsa-root { --h-q0: #e5484d; --h-q1: #f76b15; --h-q2: #d99a00; --h-q3: #2f9e5b; --h-q4: #0f9b8e; --h-q5: #8e4ec6; --h-q6: #d6409f; --h-q7: #c2410c; }
-html[data-hamsa-mode="dark"] #hamsa-root { --h-q0: #ff6b6f; --h-q1: #ff8a3d; --h-q2: #ffc53d; --h-q3: #4cc38a; --h-q4: #2ec8b6; --h-q5: #b78af0; --h-q6: #f27bc4; --h-q7: #ff9f6b; }
+#hamsa-root { --h-q0: #b42318; --h-q1: #b54708; --h-q2: #8a6100; --h-q3: #1f7a43; --h-q4: #4d7419; --h-q5: #a8326a; --h-q6: #9c2f8a; --h-q7: #9a3412; }
+html[data-hamsa-mode="dark"] #hamsa-root { --h-q0: #ff6b6f; --h-q1: #ff8a3d; --h-q2: #ffc53d; --h-q3: #4cc38a; --h-q4: #a6cf5a; --h-q5: #f28db9; --h-q6: #f27bc4; --h-q7: #ff9f6b; }
 .h-who strong, .h-who { color: var(--q, var(--h-text)) !important; }
 .h-q { margin: 6px 0 8px; padding: 6px 10px 7px 12px; border-left: 3px solid var(--q, var(--h-field)); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--q, var(--h-field)) 11%, transparent); }
 .h-q.link { cursor: pointer; }
@@ -300,7 +312,7 @@ html[data-hamsa-mode="dark"] #hamsa-root { --h-q0: #ff6b6f; --h-q1: #ff8a3d; --h
 .h-quote { border-left-color: var(--q, var(--h-field)) !important; }
 
 /* ---- Discover in threads ---- */
-.h-c.h-cdisc > .h-card { border-color: var(--h-stretch); background: linear-gradient(90deg, var(--h-stretch-bg), var(--h-card) 60%); box-shadow: inset 4px 0 0 var(--h-stretch); }
+.h-c.h-cdisc > .h-card { border-color: color-mix(in srgb, var(--h-stretch) 45%, var(--h-border)); box-shadow: inset 4px 0 0 var(--h-stretch); }
 .h-dstrip { border: 1px solid var(--h-stretch); background: var(--h-stretch-bg); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--h-gap); }
 .h-dstrip-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--h-stretch); }
 .h-dstrip-head .h-note { color: var(--h-text); opacity: .8; }
@@ -322,3 +334,40 @@ html[data-hamsa-mode="dark"] #hamsa-root { --h-q0: #ff6b6f; --h-q1: #ff8a3d; --h
 html[data-hamsa-font="literata"] .h-cbody, html[data-hamsa-font="source-serif"] .h-cbody, html[data-hamsa-font="literata"] .h-toptext, html[data-hamsa-font="source-serif"] .h-toptext { font-variant-numeric: oldstyle-nums proportional-nums; }
 .h-cbody pre, .h-cbody code { font-variant-numeric: normal; hyphens: none; }
 .h-meta, .h-num, .h-tok, .h-kv b { font-variant-numeric: tabular-nums; }
+
+/* 0.6 story card: title, then the meta line with quiet actions at its end, then the score line, which
+   opens the reasons. */
+.h-why-btn { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 0; padding: 4px 6px; margin-left: -6px; border: 0; border-radius: 8px; background: none; text-align: left; }
+.h-why-btn:hover { background: var(--h-surface); }
+.h-why-btn .h-note { text-decoration: underline; text-decoration-color: var(--h-field); text-underline-offset: 3px; }
+.h-why-btn[aria-expanded="true"] { background: var(--h-surface); }
+.h-acts { display: inline-flex; gap: 2px; align-items: center; }
+.h-ibtn.quiet { width: 32px; min-height: 32px; border-color: transparent; color: var(--h-muted); }
+.h-ibtn.quiet:hover { border-color: var(--h-field); color: var(--h-accent); }
+.h-ibtn.quiet.like[aria-pressed="true"] { border-color: var(--h-keep); }
+.h-ibtn.quiet.dislike[aria-pressed="true"] { border-color: var(--h-danger); }
+.h-stretch-card .h-stitle { text-decoration-color: var(--h-stretch); }
+@media (hover: hover) and (min-width: 700px) { .h-card:not(:hover):not(:focus-within) .h-acts { opacity: .55; } }
+@media (prefers-reduced-motion: no-preference) { .h-acts { transition: opacity .15s; } }
+
+/* Front page list. On a very wide screen with width set to Full, stories flow into two columns; section
+   and topic headings span both. Threads keep their reading measure at any width. */
+.h-front-list { display: flex; flex-direction: column; gap: var(--h-gap); }
+@media (min-width: 1900px) {
+  html[data-hamsa-width="full"] .h-front-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  html[data-hamsa-width="full"] .h-front-list > .h-section { grid-column: 1 / -1; }
+}
+@media (min-width: 2800px) { html[data-hamsa-width="full"] .h-front-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+html[data-hamsa-width="full"] .h-main .h-cbody, html[data-hamsa-width="full"] .h-toptext { max-width: 76ch; }
+/* Pressed controls: #hamsa-root button sets color: inherit with an id selector, so the accent text needs the same weight. */
+#hamsa-root .h-seg button[aria-pressed="true"], #hamsa-root .h-chip.sub[aria-pressed="true"] { color: var(--h-accent-text); }
+/* A visible focus ring in both themes. */
+#hamsa-root :focus-visible { outline: 2px solid var(--h-accent); outline-offset: 2px; }
+#hamsa-root .h-c:focus { outline: none; }
+#hamsa-root .h-c:focus-visible, #hamsa-root .h-c.h-current { box-shadow: inset 3px 0 0 var(--h-accent); }
+/* Full width on a thread: the column keeps a reading width; the side panel stays beside it. */
+html[data-hamsa-width="full"] .h-wrap:has(.h-c) .h-main { max-width: 980px; }
+html[data-hamsa-width="full"] .h-wrap:has(.h-c) { max-width: 1380px; }
+/* Full-width front grid: actions stay on the meta line, so cards keep an even height. */
+html[data-hamsa-width="full"] .h-front-list .h-meta { flex-wrap: nowrap; overflow: hidden; }
+html[data-hamsa-width="full"] .h-front-list .h-meta > :not(.h-acts):not(.h-grow) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

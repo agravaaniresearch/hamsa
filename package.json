@@ -1,16 +1,18 @@
 {
   "name": "hamsa",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "Hamsa: filters Hacker News before any model sees it",
   "scripts": {
     "test": "npm run check && node --test \"test/*.test.mjs\"",
-    "lint": "web-ext lint --source-dir extension",
+    "lint": "web-ext lint --self-hosted --source-dir extension",
     "build": "web-ext build --source-dir extension --artifacts-dir dist --overwrite-dest",
-    "check": "for f in $(find extension -name '*.js'); do node --check \"$f\" || exit 1; done"
+    "check": "for f in $(find extension -name '*.js'); do node --check \"$f\" || exit 1; done",
+    "example": "node scripts/example.mjs"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.8",
     "linkedom": "^0.18.0",
     "web-ext": "^8.0.0"
   }

@@ -1,10 +1,11 @@
 // Background page: all network calls, all scoring and all state changes happen here. The pages on
 // Hacker News, the digest and the settings page only send messages, so keys never leave this origin.
-import { api, getState, save, patchSettings, cacheGet, cachePut, addUsage, todayUsage, today } from "./lib/store.js";
+import { api, getState as readState, save, patchSettings, cacheGet, cachePut, addUsage, todayUsage, today } from "./lib/store.js";
+import { bigGet, bigSet, flush, migrateFromLocal, BIG_KEYS } from "./lib/idb.js";
 import { mergePages, prepare, verdicts as commentVerdicts, fetchPages } from "./lib/thread.js";
 import { TagGraph, buildState } from "./lib/graph.js";
 import { SUMMARY_SCHEMA, SYSTEM_PROMPT, buildUserMessage, interestsText, normalise } from "./lib/summarise.js";
-import { completeJSON, testKey, listModels, keySig, originPattern, estimateTokens, isUsable } from "./lib/providers.js";
+import { completeJSON, testKey, listModels, keySig, estimateTokens, isUsable } from "./lib/providers.js";
 import { estimateCost } from "./lib/pricing.js";
 import { fetchAllItems, saveBookmark } from "./lib/raindrop.js";
 import { parseFront, mergeFront, groupDuplicates } from "./lib/front.js";
@@ -15,24 +16,57 @@ import { makeBackup, readBackup, mergeBackup, toSyncChunks } from "./lib/backup.
 import { scoreStories, RULES_VERSION, SCORING_DEFAULTS } from "./lib/score.js";
 import { compileBlocklist, normaliseBlocklist, testBlocklist, suggestFromDismissals, DRAFT_PROMPT, DRAFT_SCHEMA } from "./lib/blocklist.js";
 import { buildProfile, bookmarkTreeToItems, parseHnList } from "./lib/profile.js";
-import { parsePreview, quickPreview, slimPreview } from "./lib/preview.js";
+import { parsePreview, quickPreview, slimPreview, safeDecode } from "./lib/preview.js";
 
 const HN = "https://news.ycombinator.com/";
 const parseDoc = (html) => new DOMParser().parseFromString(html, "text/html");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The last few analysed threads, so Summarise does not parse a thread twice. Kept small on purpose.
 const prepared = new Map(); // thread id -> { thread, prep }
-let lastFront = null;        // the most recent merged front page, for testing the blocklist
+const PREPARED_MAX = 4;
+function remember(id, entry) {
+  prepared.delete(id);
+  prepared.set(id, entry);
+  while (prepared.size > PREPARED_MAX) prepared.delete(prepared.keys().next().value);
+}
+let lastFront = null;        // the most recent front page from page 1 ({ stories, at, pages }), for the digest and blocklist tests
 
-// The tag graph is read from storage once and kept compiled in memory until it changes.
+// Large keys move out of storage.local into IndexedDB the first time 0.6 runs.
+const ready = migrateFromLocal(api.storage.local).catch((e) => { logError("migrate", e?.message || e); });
+
+// The interest profile changes only on sync; it is read once and kept in memory.
+let profileMemo;
+async function getState() {
+  await ready;
+  const s = await readState({ withProfile: false });
+  if (profileMemo === undefined) profileMemo = (await api.storage.local.get("profile")).profile || null;
+  s.profile = profileMemo;
+  return s;
+}
+
+// The tag graph (several MB) lives in IndexedDB and stays compiled in memory. What you taught it
+// (per-tag adjustments and mutes) is small and lives apart, in storage.local as "teach", so a thumb
+// writes a few hundred bytes instead of the whole graph, and Firefox Sync can carry it.
 let graphMemo = null;
 async function loadGraph() {
   if (graphMemo) return graphMemo.g;
-  const { graph } = await api.storage.local.get("graph");
+  await ready;
+  const [graph, { teach }] = await Promise.all([bigGet("graph"), api.storage.local.get("teach")]);
+  if (graph && teach) { graph.adj = teach.adj || {}; graph.muted = teach.muted || []; }
+  else if (graph && (Object.keys(graph.adj || {}).length || graph.muted?.length)) save({ teach: { adj: graph.adj, muted: graph.muted || [] } }).catch(() => {}); // from 0.5
   graphMemo = { g: graph ? new TagGraph(graph) : null };
   return graphMemo.g;
 }
-api.storage.onChanged.addListener((ch) => { if (ch.graph) { graphMemo = null; prepared.clear(); } });
-async function saveGraph(g) { await save({ graph: g.toJSON() }); }
+api.storage.onChanged.addListener((ch, area) => {
+  if (area !== "local") return;
+  // Large keys written to storage.local by older code or a test move into IndexedDB as they arrive.
+  if (BIG_KEYS.some((k) => ch[k]?.newValue != null)) migrateFromLocal(api.storage.local, { overwrite: true }).then((keys) => { if (keys.includes("graph")) { graphMemo = null; prepared.clear(); } }).catch(() => {});
+  if (ch.profile) profileMemo = undefined;
+  if (ch.settings || ch.blocklist || ch.dismissed || ch.profile) prepared.clear();
+});
+const teachOf = (g) => ({ adj: g.state.adj || {}, muted: g.state.muted || [] });
+async function saveTeach(g) { await save({ teach: teachOf(g) }); }
+async function saveGraph(g) { graphMemo = { g }; await bigSet("graph", g.toJSON(), { now: true }); await saveTeach(g); }
 
 function activeProvider(state, providerId, model) {
   const id = providerId || state.settings.active.providerId;
@@ -51,7 +85,7 @@ async function loadPrefs() {
 
 async function scoreFront(state, stories, { karmaBudget = 0 } = {}) {
   const graph = await loadGraph();
-  const { opened = null } = await api.storage.local.get("opened");
+  const opened = await bigGet("opened");
   // Stories you upvoted on HN count as likes (never over your own thumbs).
   let prefs = await loadPrefs();
   const voted = stories.filter((st) => st.voted && prefs.items[String(st.id)]?.v !== "like");
@@ -59,8 +93,8 @@ async function scoreFront(state, stories, { karmaBudget = 0 } = {}) {
     for (const st of voted) prefs = setPref(prefs, { id: st.id, kind: "story", title: st.title, domain: st.domain, url: st.url, threadId: st.id, points: st.points, author: st.by }, "like", "hn");
     await save({ prefs });
   }
-  const karma = state.settings.karma === false ? null : karmaBudget ? await karmaFor(stories.map((st) => st.by), karmaBudget) : await karmaFor([], 0);
-  const { topics: memory = [] } = await api.storage.local.get("topics");
+  const karma = state.settings.karma === false ? null : karmaBudget ? await karmaFor(stories.map((st) => st.by), karmaBudget, 40) : await karmaFor([], 0);
+  const memory = await bigGet("topics", []);
   const day = today();
   const v = scoreStories(stories, { topics: memory.map((m) => ({ ...m, firstSeenToday: (m.firstDay || day) === day && (m.days || 1) <= 1 })),
     graph, profile: state.profile, blocks: compileBlocklist(state.blocklist),
@@ -95,7 +129,7 @@ async function rememberTopics(memory, seen) {
     } else if (t.terms.length >= 2) list.push({ terms: t.terms.slice(0, 16), label: t.label, first: now, firstDay: day, last: now, lastDay: day, days: 1 });
   }
   const fresh = list.filter((m) => now - m.last < 30 * 864e5).sort((a, b) => b.last - a.last).slice(0, 500);
-  await save({ topics: fresh });
+  await bigSet("topics", fresh);
 }
 
 // ---- reading log: what you open, kept in this browser ----
@@ -103,7 +137,8 @@ const emptyOpened = () => ({ domains: {}, titles: [], tags: {} });
 async function doOpened({ entry }) {
   const { settings = {} } = await api.storage.local.get("settings");
   if (settings.readingLog === false || !entry) return { ok: true, logged: false };
-  const { readingLog = [], opened = emptyOpened() } = await api.storage.local.get(["readingLog", "opened"]);
+  const readingLog = await bigGet("readingLog", []);
+  const opened = (await bigGet("opened")) || emptyOpened();
   const e = { at: Date.now(), kind: entry.kind, id: entry.id || null, title: String(entry.title || "").slice(0, 300), url: entry.url || null, domain: entry.domain || (entry.url ? domainOf(entry.url) : null), tags: (entry.tags || []).slice(0, 6), score: entry.score ?? null, bucket: entry.bucket || null, rules: RULES_VERSION, page: entry.page || null, background: !!entry.background };
   readingLog.unshift(e);
   if (e.domain && e.kind !== "thread") opened.domains[e.domain] = (opened.domains[e.domain] || 0) + 1;
@@ -112,7 +147,8 @@ async function doOpened({ entry }) {
     opened.titles.unshift({ id: e.id, title: e.title, terms: [...new Set(tokenize(e.title))] });
     opened.titles = opened.titles.slice(0, 400);
   }
-  await save({ readingLog: readingLog.slice(0, 5000), opened });
+  await bigSet("readingLog", readingLog.slice(0, 5000));
+  await bigSet("opened", opened, { now: true }); // an open often comes just before the page goes away
   return { ok: true, logged: true };
 }
 
@@ -125,7 +161,7 @@ async function doOpenTab({ url, active, entry }) {
 
 // Stories you were shown, so the export has negatives as well as what you opened.
 async function recordImpressions(stories, verdicts) {
-  const { impressions = {} } = await api.storage.local.get("impressions");
+  const impressions = await bigGet("impressions", {});
   const now = Date.now();
   stories.forEach((st, i) => {
     const v = verdicts[i];
@@ -133,12 +169,13 @@ async function recordImpressions(stories, verdicts) {
     impressions[st.id] = { id: st.id, title: st.title, url: st.url, domain: st.domain, points: st.points, comments: st.comments, tags: v.tags, score: v.score, bucket: v.bucket, rules: RULES_VERSION, first: prev?.first || now, last: now, seen: (prev?.seen || 0) + 1 };
   });
   const keep = Object.values(impressions).sort((a, b) => b.last - a.last).slice(0, 3000);
-  await save({ impressions: Object.fromEntries(keep.map((x) => [x.id, x])) });
+  await bigSet("impressions", Object.fromEntries(keep.map((x) => [x.id, x])));
 }
 
 // One JSON object per line: every story you were shown or opened, with what Hamsa scored and what you did.
 async function doExportLog() {
-  const { impressions = {}, readingLog = [], dismissed = [] } = await api.storage.local.get(["impressions", "readingLog", "dismissed"]);
+  const impressions = await bigGet("impressions", {}), readingLog = await bigGet("readingLog", []);
+  const { dismissed = [] } = await api.storage.local.get("dismissed");
   const opens = new Map();
   for (const e of readingLog) if (e.id) { const o = opens.get(e.id) || []; o.push(e); opens.set(e.id, o); }
   const gone = new Set(dismissed.map((d) => d.id));
@@ -151,11 +188,13 @@ async function doExportLog() {
   return { jsonl: rows.map((r) => JSON.stringify(r)).join("\n"), rows: rows.length, opens: readingLog.length };
 }
 
-async function doFront({ pages }) {
+async function doFront({ pages, path = "/" }) {
   const state = await getState();
   const merged = mergeFront(pages.map((h) => parseFront(parseDoc(h))));
   if (merged.me && merged.me !== state.settings.hnUser) await patchSettings({ hnUser: merged.me });
-  lastFront = { stories: merged.stories, at: Date.now() };
+  // Only the real front page, read from page 1, may stand in for the digest's own reading
+  // (not /newest, /ask, /show, a past day or a later page).
+  if (/^\/(news)?(\?p=1)?$/.test(path)) lastFront = { stories: merged.stories, at: Date.now(), pages: pages.length };
   const { verdicts, ready, topics } = await scoreFront(state, merged.stories, { karmaBudget: 800 });
   if (state.settings.readingLog !== false) recordImpressions(merged.stories, verdicts).catch(() => {});
   const counts = { keep: 0, maybe: 0, stretch: 0, toss: 0 };
@@ -194,12 +233,12 @@ async function doDismiss({ story, undo }) {
 // ---- thread page ----
 // Author karma from HN's public API, cached for a week. Fetched within a time budget so a page never
 // waits long; whatever is still missing keeps loading and is used next time.
-const KARMA_TTL = 7 * 864e5;
+const KARMA_TTL = 7 * 864e5, KARMA_MAX = 6000;
 let karmaMemo = null;
-async function karmaFor(users, budgetMs = 1200) {
-  if (!karmaMemo) karmaMemo = (await api.storage.local.get("karma")).karma || {};
+async function karmaFor(users, budgetMs = 1200, max = 60) {
+  if (!karmaMemo) karmaMemo = (await bigGet("karma")) || {};
   const now = Date.now();
-  const want = [...new Set(users.filter(Boolean))].filter((u) => !karmaMemo[u] || now - karmaMemo[u][1] > KARMA_TTL).slice(0, 200);
+  const want = [...new Set(users.filter(Boolean))].filter((u) => !karmaMemo[u] || now - karmaMemo[u][1] > KARMA_TTL).slice(0, max);
   const known = () => Object.fromEntries(Object.entries(karmaMemo).map(([u, [k]]) => [u, k]));
   if (!want.length || budgetMs <= 0) return known();
   const one = async (u) => {
@@ -210,9 +249,9 @@ async function karmaFor(users, budgetMs = 1200) {
   };
   const run = (async () => {
     for (let i = 0; i < want.length; i += 12) await Promise.all(want.slice(i, i + 12).map(one));
-    const keep = Object.entries(karmaMemo).sort((a, b) => b[1][1] - a[1][1]).slice(0, 20000);
+    const keep = Object.entries(karmaMemo).sort((a, b) => b[1][1] - a[1][1]).slice(0, KARMA_MAX);
     karmaMemo = Object.fromEntries(keep);
-    await save({ karma: karmaMemo });
+    await bigSet("karma", karmaMemo);
   })();
   await Promise.race([run, sleep(budgetMs)]);
   return known();
@@ -223,15 +262,20 @@ async function analyse(id, pages) {
   const graph = await loadGraph();
   const html = pages?.length ? pages : await fetchPages(id, { parseDoc });
   const thread = mergePages(html, parseDoc);
-  const karma = state.settings.karma === false ? null : await karmaFor(thread.comments.filter((c) => c.status === "ok").map((c) => c.author));
+  // Karma for at most 60 new authors per thread, top-level comments first: it is a small signal.
+  const authors = thread.comments.filter((c) => c.status === "ok").sort((a, b) => (a.depth || 0) - (b.depth || 0)).map((c) => c.author);
+  const karma = state.settings.karma === false ? null : await karmaFor(authors);
   const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate, karma });
+  let prefs0 = null;
   const mine = thread.comments.filter((c) => c.my_vote);
-  if (mine.length) {
-    let prefs = await loadPrefs();
-    for (const c of mine) prefs = setPref(prefs, { id: c.id, kind: "comment", title: c.text.slice(0, 160), excerpt: c.text.slice(0, 300), author: c.author, threadId: id, threadTitle: thread.story.title, url: `${HN}item?id=${c.id}`, links: c.links || [], tags: (c.verdict?.reasons || []).filter((r) => r.kind === "tag").map((r) => r.tag) }, c.my_vote === "up" ? "like" : "dislike", "hn");
+  if (mine.length) prefs0 = await loadPrefs();
+  const fresh = mine.filter((c) => { const x = prefs0?.items[String(c.id)]; return !x || (x.source === "hn" && x.v !== (c.my_vote === "up" ? "like" : "dislike")); });
+  if (fresh.length) {
+    let prefs = prefs0;
+    for (const c of fresh) prefs = setPref(prefs, { id: c.id, kind: "comment", title: c.text.slice(0, 160), excerpt: c.text.slice(0, 300), author: c.author, threadId: id, threadTitle: thread.story.title, url: `${HN}item?id=${c.id}`, links: c.links || [], tags: (c.verdict?.reasons || []).filter((r) => r.kind === "tag").map((r) => r.tag) }, c.my_vote === "up" ? "like" : "dislike", "hn");
     await save({ prefs });
   }
-  prepared.set(id, { thread, prep });
+  remember(id, { thread, prep });
   return { state, graph, thread, prep };
 }
 
@@ -249,13 +293,14 @@ async function doThread({ id, pages }) {
     }
   } catch { /* no provider yet */ }
   const cached = await cacheGet(id);
+  const prefs = await loadPrefs();
   return {
     id, title: thread.story.title, domain: thread.story.link_domain, points: thread.story.points, author: thread.story.author,
     funnel: prep.funnel, dropped: { unavailable: stats.unavailable, ...stats.pruned }, tokens: prep.tokens, context: thread.story.context,
-    storyPref: (await loadPrefs()).items[String(id)]?.v || null,
-    verdicts: commentVerdicts(thread), subtopics: prep.subtopics, prefs: Object.fromEntries(Object.entries((await loadPrefs()).items).filter(([, x]) => x.kind === "comment").map(([k, x]) => [k, x.v])), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
+    storyPref: prefs.items[String(id)]?.v || null,
+    verdicts: commentVerdicts(thread), subtopics: prep.subtopics, prefs: Object.fromEntries(thread.comments.filter((c) => prefs.items[String(c.id)]?.kind === "comment").map((c) => [String(c.id), prefs.items[String(c.id)].v])), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
     graphReady: !!graph?.size, estimate, model, rules: RULES_VERSION,
-    cached: cached && cached.rules === RULES_VERSION ? cached : null,
+    cached: cached && cached.rules === RULES_VERSION ? { ...cached, fromCache: true } : null,
     usage: await todayUsage(),
   };
 }
@@ -277,14 +322,16 @@ function annotate(summary, comments) {
   }
 }
 
-async function doSummarise({ id, providerId, model, force }) {
+async function doSummarise({ id, pages, providerId, model, force }) {
   if (!force) {
     const hit = await cacheGet(id);
     if (hit && hit.rules === RULES_VERSION) return { ...hit, fromCache: true };
   }
   const state = await getState();
   const { p, m } = activeProvider(state, providerId, model);
-  const entry = prepared.get(id) || (await analyse(id), prepared.get(id));
+  // The page sends the HTML it already holds, so a background page that Firefox unloaded in the
+  // meantime does not read the thread from HN again.
+  const entry = prepared.get(id) || (await analyse(id, pages), prepared.get(id));
   const graph = await loadGraph();
   const interests = interestsText(graph, state.settings.extraInterests);
   const user = buildUserMessage(entry.prep.threadText, interests);
@@ -329,8 +376,8 @@ async function doFeedback(msg) {
       note = `Noted interest in ${(msg.tags || []).join(", ")}`;
       break;
   }
-  g.recompile();
-  await saveGraph(g);
+  // Adjustments and mutes are read when scoring, so no recompile is needed (it cost ~0.75 s).
+  await saveTeach(g);
   prepared.clear();
   return { ok: true, note };
 }
@@ -406,13 +453,15 @@ async function doSync() {
   const prev = await loadGraph();
   const gstate = buildState(items, { excluded: state.settings.excludedTags });
   if (prev) { gstate.adj = prev.state.adj; gstate.muted = prev.state.muted; } // keep what you taught it
-  const { pendingTeach } = await api.storage.local.get("pendingTeach");
-  if (pendingTeach) { gstate.adj = { ...pendingTeach.adj, ...gstate.adj }; gstate.muted = [...new Set([...(gstate.muted || []), ...(pendingTeach.muted || [])])]; await api.storage.local.remove("pendingTeach"); }
+  const { teach } = await api.storage.local.get("teach");
+  if (teach && !prev) { gstate.adj = { ...(teach.adj || {}) }; gstate.muted = [...(teach.muted || [])]; }
   const profile = buildProfile({ items, favourites, history, sources });
-  await save({ graph: gstate, profile, graphSyncedAt: Date.now() });
   const g = new TagGraph(gstate);
+  await saveGraph(g);
+  await save({ profile, graphSyncedAt: Date.now() });
+  profileMemo = profile;
   prepared.clear();
-  await save({ digest: null });
+  await bigSet("digest", null);
   return { items: items.length, tags: g.size, domains: Object.keys(profile.domains).length, favourites: profile.fav.length, notes, top: g.topTags(30) };
 }
 
@@ -443,19 +492,21 @@ async function doBlocklistDraft({ text }) {
 }
 
 async function frontStories(pagesWanted = 1) {
-  if (lastFront && Date.now() - lastFront.at < 30 * 60e3) return lastFront.stories;
+  if (lastFront && Date.now() - lastFront.at < 30 * 60e3 && lastFront.pages >= pagesWanted) return lastFront.stories;
   const pages = [];
   let url = `${HN}news`;
   for (let i = 0; i < pagesWanted && url; i++) {
-    const res = await fetch(url, { credentials: "omit" });
-    if (!res.ok) throw new Error(`Hacker News returned ${res.status}.`);
+    let res = await fetch(url, { credentials: "omit" }).catch(() => null);
+    if (res?.status === 503) { await sleep(2500); res = await fetch(url, { credentials: "omit" }).catch(() => null); }
+    // A page that fails ends the reading; what was read is used. Only a failed first page is an error.
+    if (!res?.ok) { if (!pages.length) throw new Error(`Hacker News returned ${res ? res.status : "no answer"}.`); break; }
     const p = parseFront(parseDoc(await res.text()));
     pages.push(p);
     url = p.more ? new URL(p.more, HN).href : null;
     if (url && i + 1 < pagesWanted) await sleep(700);
   }
   const merged = mergeFront(pages).stories;
-  lastFront = { stories: merged, at: Date.now() };
+  lastFront = { stories: merged, at: Date.now(), pages: pages.length };
   return merged;
 }
 
@@ -471,13 +522,12 @@ async function doBlocklistTest({ blocklist }) {
 async function buildDigest() {
   const state = await getState();
   const want = Math.max(1, Math.min(6, state.settings.scoring.pages || 4));
-  lastFront = null;
-  const stories = await frontStories(want);
+  const stories = await frontStories(want); // reuses the front page you just read, if fresh
   const { verdicts } = await scoreFront(state, stories);
   const tagsById = new Map(verdicts.map((v) => [v.id, v.tags || []]));
   const slim = stories.map((st) => ({ id: st.id, title: st.title, url: st.url, domain: st.domain, points: st.points, comments: st.comments, by: st.by, ageText: st.ageText }));
   const digest = { date: today(), built_at: Date.now(), stories: slim, tags: Object.fromEntries(tagsById), pages: want, rules: RULES_VERSION, schema: 2 };
-  await save({ digest });
+  await bigSet("digest", digest);
   return digest;
 }
 
@@ -504,7 +554,7 @@ function likeLibrary(prefs) {
 }
 
 async function doDigest({ force }) {
-  let { digest } = await api.storage.local.get("digest");
+  let digest = await bigGet("digest");
   if (force || !digest || digest.date !== today() || digest.rules !== RULES_VERSION || digest.schema !== 2) digest = await buildDigest();
   const prefs = await loadPrefs();
   const picks = likeScore(digest.stories, prefs, { tagsOf: (st) => digest.tags?.[st.id] || [] });
@@ -520,9 +570,6 @@ async function doTestKey({ id }) {
   const { providers } = await getState();
   const p = providers.find((x) => x.id === id);
   if (!p) throw new Error("Unknown provider.");
-  if (p.baseUrl && !/localhost|127\.0\.0\.1/.test(p.baseUrl)) {
-    try { await api.permissions.request({ origins: [originPattern(p.baseUrl)] }); } catch { /* may already be granted */ }
-  }
   const r = await testKey(p);
   const fresh = (await getState()).providers;
   const t = fresh.find((x) => x.id === id);
@@ -541,6 +588,20 @@ async function doUiState() {
   const pick = ["theme", "font", "titleFont", "textSize", "width", "justify", "density", "darkStyle", "skin", "layer", "order", "scoring", "hnUser", "learning", "fx", "linkTarget", "threadView", "threadSort", "collapseTossed", "readingLog", "previews", "previewImages", "quoteColours"];
   return { ...Object.fromEntries(pick.map((k) => [k, s[k]])), previewAllowed: await canPreview(), usage: await todayUsage(), model, models };
 }
+
+// ---- HN login ----
+// hnLogin: { user, pass, auto, status: ok | bad | captcha | paused | error, at }. Read by no backup or
+// sync. The page asks for the login when HN shows it logged out; the page itself posts HN's own login
+// form (so the cookie lands exactly as when you log in by hand) and reports back. At most one try every
+// five minutes, and none after a wrong password or a captcha until you save the login again.
+const LOGIN_GAP = 5 * 60e3;
+async function hnLogin() { return (await api.storage.local.get("hnLogin")).hnLogin || {}; }
+// HN pages read only hnAuto ({ auto, status }), never the password itself.
+async function saveLogin(l) { await save({ hnLogin: l, hnAuto: { auto: !!l.auto, status: l.status || null } }); }
+// One login question at a time, so tabs restored together cannot each post the form.
+let loginQueue = Promise.resolve();
+const oneAtATime = (fn) => { const run = loginQueue.then(fn); loginQueue = run.catch(() => {}); return run; };
+const fromHN = (sender) => /^https:\/\/news\.ycombinator\.com\//.test(sender?.url || sender?.tab?.url || "");
 
 const handlers = {
   front: doFront,
@@ -574,17 +635,27 @@ const handlers = {
   previews: doPreviews,
   review: doReview,
   "preview-info": async () => { const c = await previewCache(); const { settings = {} } = await api.storage.local.get("settings"); return { allowed: await canPreview(), cached: Object.keys(c).length, on: settings.previews !== false, images: settings.previewImages !== false }; },
-  "previews-clear": async () => { previewMemo = {}; await save({ previews: {} }); return { ok: true }; },
+  "previews-clear": async () => { previewMemo = {}; await bigSet("previews", {}); return { ok: true }; },
   pref: async ({ item, value }) => {
     let prefs = await loadPrefs();
+    const prev = prefs.items[String(item.id)]?.v || null;
     prefs = setPref(prefs, item, value, "you");
     await save({ prefs });
-    if (value) await doOpened({ entry: { kind: item.kind === "comment" ? "link" : "story", id: item.id, title: item.title, domain: item.domain, tags: item.tags, page: value } }).catch(() => {});
+    // A thumb also teaches the tags that fired on the item (0.5 recorded thumbs without teaching).
+    // Changing or clearing a thumb takes back what the earlier one taught.
+    const pts = (v) => (v === "like" ? 0.3 : v === "dislike" ? -0.3 : 0);
+    const delta = pts(value) - pts(prev);
+    const { settings = {} } = await api.storage.local.get("settings");
+    if (delta && item.tags?.length && settings.learning !== "off") {
+      const g = await loadGraph();
+      if (g) { g.nudge(item.tags, delta); await saveTeach(g); prepared.clear(); }
+    }
     return { ok: true, counts: derivePrefs(prefs).counts };
   },
   "open-tab": doOpenTab,
   "export-log": doExportLog,
-  "log-clear": async () => { await save({ readingLog: [], opened: emptyOpened(), impressions: {} }); return { ok: true }; },
+  "log-clear": async () => { await bigSet("readingLog", []); await bigSet("opened", emptyOpened()); await bigSet("impressions", {}, { now: true }); return { ok: true }; },
+  "log-count": async () => ({ opened: (await bigGet("readingLog", [])).length, seen: Object.keys(await bigGet("impressions", {})).length }),
   "set-ui": async ({ patch }) => {
     const allowed = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => ["theme", "layer", "order", "active", "threadView", "threadSort", "collapseTossed", "linkTarget"].includes(k)));
     if (patch?.pages) {
@@ -599,6 +670,27 @@ const handlers = {
     else await api.runtime.openOptionsPage();
     return { ok: true };
   },
+  "hn-login-state": async () => { const l = await hnLogin(); return { user: l.user || "", hasPass: !!l.pass, auto: !!l.auto, status: l.status || null, at: l.at || null }; },
+  "hn-login-save": async ({ user, pass, auto }) => {
+    const l = await hnLogin();
+    await saveLogin({ ...l, user: String(user || l.user || "").trim(), pass: pass == null ? l.pass || "" : String(pass), auto: auto == null ? !!l.auto : !!auto, status: null, at: 0 });
+    return { ok: true };
+  },
+  // Asked by an HN page that shows you logged out. Only pages on news.ycombinator.com get an answer.
+  "hn-login-ask": async (_msg, sender) => oneAtATime(async () => {
+    const l = await hnLogin();
+    if (!fromHN(sender) || !l.auto || !l.user || !l.pass) return { go: false };
+    if (["bad", "captcha", "paused"].includes(l.status)) return { go: false, status: l.status };
+    if (Date.now() - (l.at || 0) < LOGIN_GAP) return { go: false, status: "wait" };
+    await saveLogin({ ...l, at: Date.now() });
+    return { go: true, acct: l.user, pw: l.pass };
+  }),
+  "hn-login-result": async ({ status }, sender) => {
+    if (!fromHN(sender)) return { ok: false };
+    const l = await hnLogin();
+    if (["ok", "bad", "captcha", "paused", "error"].includes(status)) await saveLogin({ ...l, status, at: status === "paused" ? l.at : Date.now() });
+    return { ok: true };
+  },
   "open-digest": async () => { await api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }); return { ok: true }; },
 };
 
@@ -609,7 +701,7 @@ const PREVIEW_TTL = 14 * 864e5, PREVIEW_MAX = 1500, PREVIEW_BYTES = 512 * 1024;
 let previewMemo = null, previewSaveTimer = null;
 const previewFlight = new Map();
 async function previewCache() {
-  if (!previewMemo) previewMemo = (await api.storage.local.get("previews")).previews || {};
+  if (!previewMemo) previewMemo = (await bigGet("previews")) || {};
   return previewMemo;
 }
 function savePreviewsSoon() {
@@ -617,7 +709,7 @@ function savePreviewsSoon() {
   previewSaveTimer = setTimeout(async () => {
     const list = Object.entries(previewMemo || {}).sort((a, b) => b[1].at - a[1].at).slice(0, PREVIEW_MAX);
     previewMemo = Object.fromEntries(list);
-    await save({ previews: previewMemo }).catch(() => {});
+    await bigSet("previews", previewMemo).catch(() => {});
   }, 3000);
 }
 async function canPreview() {
@@ -653,7 +745,7 @@ async function fetchPreview(url) {
     }
     const res = await fetch(url, { credentials: "omit", redirect: "follow", signal: ctl.signal, headers: { Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5" } });
     const type = res.headers.get("content-type") || "";
-    if (/application\/pdf/.test(type)) return { url, kind: "pdf", site: new URL(res.url || url).hostname.replace(/^www\./, ""), title: decodeURIComponent(new URL(url).pathname.split("/").pop() || "PDF"), description: "PDF document" };
+    if (/application\/pdf/.test(type)) return { url, kind: "pdf", site: new URL(res.url || url).hostname.replace(/^www\./, ""), title: safeDecode(new URL(url).pathname.split("/").pop() || "PDF"), description: "PDF document" };
     if (/^image\//.test(type)) return { url, kind: "image", image: url, site: new URL(url).hostname };
     if (!res.ok) return { url, error: "http", status: res.status };
     if (type && !/html|xml/.test(type)) return { url, error: "not-html" };
@@ -673,7 +765,7 @@ async function doPreviews({ urls = [], images }) {
   await Promise.all([...new Set(urls)].slice(0, 12).map(async (u) => {
     const hit = cache[u];
     if (hit && now - hit.at < (hit.p.error ? 864e5 : PREVIEW_TTL)) { out[u] = hit.p; return; }
-    if (!previewFlight.has(u)) previewFlight.set(u, fetchPreview(u).finally(() => previewFlight.delete(u)));
+    if (!previewFlight.has(u)) previewFlight.set(u, fetchPreview(u).catch(() => ({ url: u, error: "bad-url" })).finally(() => previewFlight.delete(u)));
     const p = slimPreview(await previewFlight.get(u));
     cache[u] = { p, at: Date.now() };
     out[u] = p;
@@ -694,18 +786,28 @@ async function doReview({ id, action }) {
 
 // ---- backup, import and sync ----
 const VERSION = api.runtime.getManifest().version;
-const BACKUP_KEYS = ["settings", "blocklist", "prefs", "dismissed", "opened", "graph", "providers", "raindropToken", "readingLog", "impressions"];
-async function currentStore() { return api.storage.local.get(BACKUP_KEYS); }
+const BACKUP_KEYS = ["settings", "blocklist", "prefs", "dismissed", "providers", "raindropToken", "teach"];
+async function currentStore() {
+  await ready;
+  const local = await api.storage.local.get(BACKUP_KEYS);
+  const [opened, readingLog, impressions] = await Promise.all([bigGet("opened"), bigGet("readingLog"), bigGet("impressions")]);
+  // makeBackup reads what you taught the graph from store.graph.
+  return { ...local, graph: local.teach || null, opened, readingLog, impressions };
+}
 
 async function applyMerge(patch) {
   const { teach, ...rest } = patch;
   if (teach) {
+    const { teach: mine = { adj: {}, muted: [] } } = await api.storage.local.get("teach");
+    const merged = { adj: { ...(teach.adj || {}), ...(mine.adj || {}) }, muted: [...new Set([...(mine.muted || []), ...(teach.muted || [])])] };
+    rest.teach = merged;
     const g = await loadGraph();
-    if (g) { g.state.adj = { ...teach.adj, ...g.state.adj }; g.state.muted = [...new Set([...(g.state.muted || []), ...(teach.muted || [])])]; await saveGraph(g); }
-    else rest.pendingTeach = teach;
+    if (g) { g.state.adj = merged.adj; g.state.muted = merged.muted; }
   }
+  for (const k of BIG_KEYS) if (k in rest) { await bigSet(k, rest[k]); delete rest[k]; }
   syncPaused = true;
   try { await save(rest); } finally { setTimeout(() => { syncPaused = false; }, 1000); }
+  prepared.clear();
   return Object.keys(patch);
 }
 
@@ -721,6 +823,13 @@ async function doBackupImport({ json }) {
 }
 
 // Firefox Sync: the same backup, without keys or the reading log, in storage.sync.
+let deviceMemo = null;
+async function deviceId() {
+  if (deviceMemo) return deviceMemo;
+  let { deviceId: d } = await api.storage.local.get("deviceId");
+  if (!d) { d = crypto.randomUUID(); await api.storage.local.set({ deviceId: d }); }
+  return (deviceMemo = d);
+}
 let syncPaused = false, syncTimer = null, lastPushed = "";
 async function syncState() { const { syncInfo = {} } = await api.storage.local.get("syncInfo"); return syncInfo; }
 async function setSyncInfo(patch) { const cur = await syncState(); await api.storage.local.set({ syncInfo: { ...cur, ...patch } }); }
@@ -730,20 +839,22 @@ async function firefoxPush() {
   const joined = parts.join("");
   if (joined === lastPushed) return { ok: true, unchanged: true };
   const old = await api.storage.sync.get(null);
-  const items = { "hamsa:meta": { n: parts.length, at: Date.now(), v: VERSION } };
+  const items = { "hamsa:meta": { n: parts.length, at: Date.now(), v: VERSION, d: await deviceId() } };
   parts.forEach((p, i) => { items[`hamsa:${i}`] = p; });
   await api.storage.sync.set(items);
   const stale = Object.keys(old).filter((k) => /^hamsa:\d+$/.test(k) && Number(k.split(":")[1]) >= parts.length);
   if (stale.length) await api.storage.sync.remove(stale);
   lastPushed = joined;
-  await setSyncInfo({ firefoxPushedAt: Date.now(), firefoxBytes: joined.length });
-  return { ok: true, bytes: joined.length };
+  const bytes = parts.reduce((a, p, i) => a + new TextEncoder().encode(`hamsa:${i}${JSON.stringify(p)}`).length, 0); // as Firefox counts them
+  await setSyncInfo({ firefoxPushedAt: Date.now(), firefoxBytes: bytes });
+  return { ok: true, bytes };
 }
 
 async function firefoxPull() {
   const all = await api.storage.sync.get(null);
   const meta = all["hamsa:meta"];
   if (!meta) return { ok: true, empty: true };
+  if (meta.d && meta.d === (await deviceId())) return { ok: true, own: true }; // our own push coming back
   const text = Array.from({ length: meta.n }, (_, i) => all[`hamsa:${i}`] || "").join("");
   const info = await syncState();
   if (info.firefoxPulledAt && meta.at <= info.firefoxPulledAt) return { ok: true, unchanged: true };
@@ -783,7 +894,7 @@ async function gistPull() {
 }
 
 // Push a little after anything worth syncing changes.
-const SYNCED = ["settings", "blocklist", "prefs", "dismissed", "graph"];
+const SYNCED = ["settings", "blocklist", "prefs", "dismissed", "teach"];
 api.storage.onChanged.addListener((ch, area) => {
   if (area === "sync") { if (Object.keys(ch).some((k) => k.startsWith("hamsa:"))) settingsSync("pull"); return; }
   if (syncPaused || !SYNCED.some((k) => ch[k])) return;
@@ -808,10 +919,10 @@ async function logError(where, message) {
 handlers["log-error"] = async ({ where, message }) => { await logError(where, message); return { ok: true }; };
 handlers["errors-clear"] = async () => { await save({ errors: [] }); return { ok: true }; };
 
-api.runtime.onMessage.addListener((msg) => {
+api.runtime.onMessage.addListener((msg, sender) => {
   const h = handlers[msg?.type];
   if (!h) return undefined;
-  return h(msg).catch((e) => {
+  return h(msg, sender).catch((e) => {
     logError(msg.type, e?.message || e);
     return { error: e?.message || String(e) };
   });
@@ -820,12 +931,9 @@ api.runtime.onMessage.addListener((msg) => {
 // The toolbar button opens the digest.
 api.action?.onClicked.addListener(() => api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }));
 
-// The digest is built once a day, the first time the browser starts.
+// Pending IndexedDB writes go out before Firefox unloads the background page.
+api.runtime.onSuspend?.addListener(() => { flush().catch(() => {}); });
+
+// Firefox Sync is pulled when the browser starts. The digest is built when you open it, not before.
 api.runtime.onStartup.addListener(() => settingsSync("pull"));
-api.runtime.onStartup.addListener(async () => {
-  try {
-    const { digest } = await api.storage.local.get("digest");
-    if (!digest || digest.date !== today()) await buildDigest();
-  } catch { /* offline; it is built on demand instead */ }
-});
 

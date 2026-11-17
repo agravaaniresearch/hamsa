@@ -9,7 +9,7 @@
 // A tag is "activated" by a text when at least two of its distinctive terms appear (or its own name
 // does). Activation spreads a little along co-occurrence edges, so a text about "federated" can
 // reach "sovereign ai". Muted tags subtract instead of add. Feedback moves one number per tag.
-import { tokenize } from "./tokenize.js";
+import { tokenize, shortWords } from "./tokenize.js";
 
 export const SCHEMA = "hamsa.graph/1";
 
@@ -35,9 +35,15 @@ const K1 = 1.2, B = 0.75;
 const MIN_TERM_DOCS = 2;       // a term must recur in this many items under a tag to count
 const MIN_ACT = 0.2;           // weaker activations are noise
 const MIN_TAG_COUNT = 4;      // a tag used fewer times than this is a one-off, not yet an interest
-const ADJ_LIMIT = 2;
+const ADJ_LIMIT = 2;           // the learned adjustment stays inside +-2 (a multiplier between x0.14 and x7.4)
+// Recency (rules 0.6). Each tag keeps rc, its bookmarks counted with a half-life, as of its newest bookmark.
+const HALF_LIFE_DAYS = 365;    // a bookmark a year older than your newest counts half; 0 switches recency off
+const RECENT_FULL = 3;         // a tag with 3 or more recent-equivalent bookmarks keeps its full weight
+const RECENCY_FLOOR = 0.5;     // a tag you stopped using keeps at least half its weight
 
 const r2 = (x) => Math.round(x * 100) / 100;
+const r3 = (x) => Math.round(x * 1000) / 1000;
+const DAY = 864e5;
 const uniq = (a) => [...new Set(a)];
 
 export function isStructural(tag, extra = []) {
@@ -45,7 +51,16 @@ export function isStructural(tag, extra = []) {
 }
 
 export function emptyState() {
-  return { schema: SCHEMA, built_at: 0, n_items: 0, tags: {}, cooc: {}, adj: {}, muted: [], excluded: [], params: { minTagCount: MIN_TAG_COUNT, minTermDocs: MIN_TERM_DOCS } };
+  return { schema: SCHEMA, built_at: 0, n_items: 0, tags: {}, cooc: {}, adj: {}, muted: [], excluded: [], params: { minTagCount: MIN_TAG_COUNT, minTermDocs: MIN_TERM_DOCS, halfLifeDays: HALF_LIFE_DAYS } };
+}
+
+// The recency factor of one tag: floor + (1 - floor) x min(1, recent / min(RECENT_FULL, count)), where recent
+// is rc aged from the tag's newest bookmark to the newest bookmark in the whole library. A tag whose
+// bookmarks are all recent keeps its full weight, however few. 1 when there is no date.
+export function recency(node, newest, halfLifeDays = HALF_LIFE_DAYS) {
+  if (!(halfLifeDays > 0) || !(newest > 0) || !(node.last > 0) || !(node.rc > 0)) return 1;
+  const recent = node.rc * Math.pow(2, -Math.max(0, newest - node.last) / (halfLifeDays * DAY));
+  return RECENCY_FLOOR + (1 - RECENCY_FLOOR) * Math.min(1, recent / Math.min(RECENT_FULL, Math.max(1, node.count || 1)));
 }
 
 function addTerms(tf, tokens, weight) {
@@ -71,7 +86,14 @@ export function addItem(state, item) {
     node.dc ||= {};
     node.count += 1;
     addDocs(node.dc, [...tokenize(tag), ...title, ...excerpt, ...note, ...highlights.flat()]);
-    node.last = Math.max(node.last, item.created ? Date.parse(item.created) || 0 : 0);
+    // Recent count: each dated bookmark adds 1, aged by the half-life to the tag's newest date. Undated
+    // bookmarks are left out of it (a tag with none dated is never faded).
+    const t = item.created ? Date.parse(item.created) || 0 : 0;
+    const h = (state.params?.halfLifeDays || HALF_LIFE_DAYS) * DAY;
+    if (t > 0) {
+      if (t >= (node.last || 0)) { node.rc = r3((node.rc || 0) * Math.pow(2, -(t - (node.last || 0)) / h) + 1); node.last = t; }
+      else node.rc = r3((node.rc || 0) + Math.pow(2, -(node.last - t) / h));
+    }
     addTerms(node.tf, tokenize(tag), W_NAME);
     addTerms(node.tf, title, W_TITLE);
     addTerms(node.tf, excerpt, W_EXCERPT);
@@ -113,6 +135,11 @@ export function compile(state) {
   const df = new Map();
   for (const n of names) for (const t of Object.keys(state.tags[n].tf)) df.set(t, (df.get(t) || 0) + 1);
   const compiled = new Map();
+  // Ages are counted back from the newest bookmark in the library, not from today, so a library you have not
+  // added to for a while keeps its balance.
+  let newest = 0;
+  for (const n of names) newest = Math.max(newest, state.tags[n].last || 0);
+  const halfLife = state.params?.halfLifeDays ?? HALF_LIFE_DAYS;
   for (const n of names) {
     const node = state.tags[n];
     if (node.count < (state.params?.minTagCount ?? MIN_TAG_COUNT)) continue;
@@ -131,7 +158,20 @@ export function compile(state) {
     // Anchors are the terms that identify a tag: its own name and terms found under at most three tags.
     // A tag fires only when an anchor appears, so generic words (plan, cost, use) cannot activate it alone.
     const anchors = new Set([...nameTokens, ...top.filter(([t]) => df.get(t) <= 3).map(([t]) => t)]);
-    compiled.set(n, { terms, nameTokens, anchors, weight: Math.max(0.02, specific * seen) });
+    const rec = recency(node, newest, halfLife);
+    compiled.set(n, { terms, nameTokens, short: shortWords(n), anchors, recency: rec, weight: Math.max(0.02, specific * seen * rec) });
+  }
+  // Inverted index. A tag can fire only when one of its anchor terms (or, for titles, a word of its name)
+  // is in the text, so a text needs to visit only the tags reached through those words. ord keeps the
+  // tags in compile order, so the result is the same, to the last digit, as looping over every tag.
+  const anchorIndex = new Map(), nameIndex = new Map(), shortIndex = new Map();
+  const post = (m, t, n) => { if (!m.has(t)) m.set(t, []); m.get(t).push(n); };
+  let ord = 0;
+  for (const [n, info] of compiled) {
+    info.ord = ord++;
+    for (const t of info.terms.keys()) if (info.anchors.has(t)) post(anchorIndex, t, n);
+    for (const t of info.nameTokens) post(nameIndex, t, n);
+    for (const t of info.short) post(shortIndex, t, n);
   }
   const edges = new Map();
   for (const [key, c] of Object.entries(state.cooc)) {
@@ -146,7 +186,19 @@ export function compile(state) {
     }
   }
   for (const [k, list] of edges) edges.set(k, list.sort((p, q) => q[1] - p[1]).slice(0, NEIGHBOURS));
-  return { state, tags: compiled, edges };
+  return { state, tags: compiled, edges, anchorIndex, nameIndex, shortIndex };
+}
+
+// The tags worth checking for a set of tokens: those with an anchor term in it (and, with names=true,
+// those with a word of their name in it), in compile order.
+function candidates(c, tokens, names = false, short = []) {
+  const out = new Set();
+  for (const t of tokens) {
+    for (const n of c.anchorIndex.get(t) || []) out.add(n);
+    if (names) for (const n of c.nameIndex.get(t) || []) out.add(n);
+  }
+  for (const t of short) for (const n of c.shortIndex.get(t) || []) out.add(n);
+  return [...out].sort((a, b) => c.tags.get(a).ord - c.tags.get(b).ord);
 }
 
 export class TagGraph {
@@ -157,9 +209,14 @@ export class TagGraph {
 
   recompile() { this.c = compile(this.state); this._vocab = null; }
 
-  get size() { return Object.keys(this.state.tags).length; }
+  // Tags in use: compiled tags that can score (used at least minTagCount times). 0 means nothing can match yet,
+  // so callers treat the graph as not ready. stored counts every tag kept in the raw statistics.
+  get size() { return this.c.tags.size; }
+  get stored() { return Object.keys(this.state.tags).length; }
 
-  adj(tag) { return this.state.adj[tag] || 0; }
+  // The learned adjustment, used as exp(adj) on the tag's weight. A stored value that is not a number
+  // (a hand-edited or damaged backup) counts as no adjustment rather than turning scores into NaN.
+  adj(tag) { const v = this.state.adj[tag]; return Number.isFinite(v) ? Math.max(-ADJ_LIMIT, Math.min(ADJ_LIMIT, v)) : 0; }
   isMuted(tag) { return this.state.muted.includes(tag); }
 
   boost(tag) { this.state.adj[tag] = Math.min(ADJ_LIMIT, this.adj(tag) + 1); this.state.muted = this.state.muted.filter((t) => t !== tag); }
@@ -168,6 +225,7 @@ export class TagGraph {
 
   // Thumbs and implicit signals nudge the tags that fired on a point. delta is about +-0.3 for a thumb.
   nudge(tags, delta) {
+    if (!Number.isFinite(delta)) return;
     for (const t of tags) {
       if (!this.state.tags[t]) continue;
       this.state.adj[t] = Math.max(-ADJ_LIMIT, Math.min(ADJ_LIMIT, r2(this.adj(t) + delta)));
@@ -180,19 +238,19 @@ export class TagGraph {
     const docs = texts.map((t) => tokenize(t));
     const N = docs.length || 1;
     const avgLen = docs.reduce((a, d) => a + d.length, 0) / N || 1;
-    const tagEntries = [...this.c.tags];
     // A term that fills the whole thread ("model" in an AI thread) cannot tell comments apart.
     const df = new Map();
     for (const d of docs) for (const t of new Set(d)) df.set(t, (df.get(t) || 0) + 1);
     const bidf = (t) => Math.log(1 + (N + 0.5) / ((df.get(t) || 0) + 0.5)) / Math.log(2 + N);
 
     const raws = docs.map((tokens) => {
-      if (!tokens.length) return { act: new Map(), terms: new Map() };
+      if (!tokens.length) return { act: new Map(), why: new Map() };
       const tf = new Map();
       for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
       const norm = 1 - B + (B * tokens.length) / avgLen;
       const act = new Map(), why = new Map();
-      for (const [name, info] of tagEntries) {
+      for (const name of candidates(this.c, tf.keys())) {
+        const info = this.c.tags.get(name);
         let sum = 0, hits = 0, nameHit = false, anchorHit = false;
         const matched = [];
         for (const [term, w] of info.terms) {
@@ -261,13 +319,16 @@ export class TagGraph {
   // second term) almost never fires. Here a tag also fires when every word of its name is in the title.
   // Absolute: no scaling against the batch, so a title scores the same on any page.
   scoreTitles(texts) {
-    const tagEntries = [...this.c.tags];
     return texts.map((text) => {
       const set = new Set(tokenize(text));
       const act = new Map();
       if (set.size) {
-        for (const [name, info] of tagEntries) {
-          const nameAll = info.nameTokens.size > 0 && [...info.nameTokens].every((t) => set.has(t));
+        // Short words of a tag's name ("ai" in "ai safety") must be in the title too, so "safety" alone
+        // does not fire "ai safety", and a tag called "ml" can match by name.
+        const short = new Set(shortWords(text));
+        for (const name of candidates(this.c, set, true, short)) {
+          const info = this.c.tags.get(name);
+          const nameAll = info.nameTokens.size + info.short.length > 0 && [...info.nameTokens].every((t) => set.has(t)) && info.short.every((t) => short.has(t));
           let sum = 0, hits = 0, anchor = false;
           for (const [term, w] of info.terms) {
             if (!set.has(term)) continue;

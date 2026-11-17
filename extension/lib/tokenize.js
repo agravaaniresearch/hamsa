@@ -29,3 +29,9 @@ export function tokenize(text) {
 export function words(text) {
   return (String(text).toLowerCase().replace(/https?:\/\/\S+/g, " ").match(/[a-z][a-z0-9+#-]{2,}/g) || []).filter((w) => !STOP.has(w));
 }
+
+// Words of one or two letters that are not stop words ("ai", "ml", "ux", "os"). tokenize() drops them, so
+// title scoring checks them separately when they are part of a tag's name.
+export function shortWords(text) {
+  return [...new Set((String(text).toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length < 3 && /[a-z]/.test(w) && !STOP.has(w)))];
+}

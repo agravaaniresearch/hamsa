@@ -2,6 +2,55 @@
 
 All notable changes to Hamsa. Versions follow the signed builds: the committed manifest carries major.minor.patch, and CI builds add the run number as the patch.
 
+## 0.6.0 (2026-11-17)
+
+An independent review of 0.5: the same features, much lighter, with the bugs a QA pass found fixed, a calibrated relevance engine, automatic HN login and self-updating builds.
+
+### Lighter
+- **Large data moved to IndexedDB**: the tag graph, karma, link previews, impressions, the reading log, saved summaries, topics, the digest and opened-site counts. Firefox used to copy every change to these (old value and new, up to several MB) into every open HN tab; IndexedDB sends nothing. Existing data moves over on first start.
+- **What you teach is stored apart from the graph** (`teach`): a thumb now writes a few hundred bytes instead of the whole graph, and Firefox Sync carries it.
+- **Writes are batched**: several changes within 1.5 seconds become one write.
+- **No work at browser start**: the digest is built when you open it, from the front page you already read if it is fresh.
+- **Fewer requests**: author karma for at most 60 new authors per thread (top-level first) and 40 per front page, down from 200; the extra front pages are kept for three minutes in the tab, so going back from a thread does not read them again; Summarise reuses the thread the page already holds instead of reading it from HN again after Firefox unloads the background page.
+- **Threads**: replies are counted once instead of on every redraw; link-preview slots from a previous draw are released.
+- Measured on the 689-comment fixture thread in Firefox 160: CPU 4.0 s to 2.4 s, time to a drawn thread 2.8 s to 1.6 s, karma requests 200 to 60, HN requests after an unload 1 to 0.
+
+### Relevance engine, rules v0.6
+- **An inverted index**: a comment or title visits only the tags whose anchor words it contains. Scores are identical to 0.5 (checked against a frozen copy of the 0.5 engine on every fixture and a 3,400-tag library); 600 comments score in 131 ms instead of 1,008 ms, 150 titles in 6.5 ms instead of 165 ms.
+- **Interests fade slowly with age**: each tag counts its bookmarks with a one-year half-life, measured from your newest bookmark, never from today, and never below half weight. In simulation this lifted ranking quality (NDCG@10) from 0.645 to 0.750 for a reader whose interests move, and changed nothing for one whose interests are stable. Undated bookmarks are not faded.
+- **Thumbs now teach**: a like or dislike moves the tags that fired on the item (±0.3), and changing or clearing it takes that back. In 0.5 thumbs were recorded but never reached the tag graph.
+- **Short words in tag names count**: "ai safety" no longer fires on "Warehouse safety rules", nor "sovereign ai" on "Sovereign debt crisis", and a tag named "ml" can match.
+- "Tags in use" counts only tags that can score: a library where no tag is used four times no longer tosses every story.
+- Tested and not adopted, because neither beat the current rule beyond noise: Bayesian (Beta) learning in place of the ±0.3 steps, and IDF-weighted novelty for Discover. The keep line is unchanged until it can be tuned on your own reading log; raising it to 0.85 would roughly halve Keep.
+
+### New
+- **Automatic HN login** (Settings, Sources): when HN shows you logged out, Hamsa logs you in through HN's own login form and reloads the page. The password stays in this browser only: no backup, sync or gist ever reads it. It stops after a wrong password or a captcha, and logging out by hand pauses it until you next log in yourself.
+- **Self-updating**: installed copies check `updates.json` in this repository and install newer signed builds by themselves, verified by hash. 0.6 must be installed by hand once.
+- **Full width**: a page width for ultrawide screens, with the front page in two or three columns; comments keep their reading measure.
+
+### Look: Kshira
+- A new palette: jade-white paper and pond-green ink, lotus for Discover, turmeric for maybe, lotus leaf for keep. Dark mode is Pond (the lotus pond at night); neutral and black remain. No blue anywhere.
+- **Heat strip**: every score is drawn on the whole 0 to 1 scale from silt through turmeric to leaf, with a tick at your keep line. The score line itself opens "Why this score".
+- **Quieter story cards**: title, then the meta line with the actions as small icons at its end, then the score. The Discover ribbon, badge and gradient are gone; the section heading and a lotus rule say it once.
+- No all-capital labels; person colours in threads meet 4.5:1 contrast in light mode.
+
+### Fixed (from the QA pass)
+- Settings: editing an AI provider (key, name, URL, models) could be lost and the field revert, because the page held a stale copy. The first key pasted after opening settings was the usual victim.
+- Firefox Sync failed with non-ASCII likes (Hindi, Japanese) and ran within 176 bytes of the limit with ASCII: items are now sized in UTF-8 bytes as Firefox counts them.
+- Every Firefox Sync push triggered a second one (its own change came back as a pull).
+- `/bestcomments` (and other pages starting with best, ask or show) became an empty "Stories, filtered" page.
+- A thumbs-down was logged as an open, which raised later scores for that site and similar titles.
+- The digest failed entirely when one later HN page failed, and read the pages again that the front page had just read.
+- Two settings changes at once could lose one.
+- j and k now move keyboard focus, not only the highlight; smooth scrolling respects reduced motion.
+- A PDF link with a broken %-escape failed a whole batch of previews; a Raindrop token stuck on "too many requests" retried forever; duplicate detection lower-cased link paths and dropped any parameter starting with "share".
+- Liked links in the settings list pointed to a broken HN address; a saved summary now says it used no new tokens; HN votes are written to likes only when they change.
+- The background page no longer asks Firefox for permissions it can only get from a click.
+
+### For engineers
+- `test/background.test.mjs` runs the background page end to end with a fake browser and fake IndexedDB.
+- `scripts/release.mjs` signs and stages a release; the release workflow tests every push and signs on request. See DEPLOY.md.
+
 ## 0.5.1 (2026-11-10)
 
 ### Fixed

@@ -29,12 +29,14 @@
 
   // ---- read every page of the thread ----
   const docs = [document];
+  let pagesHtml = null; // kept so Summarise never reads the thread from HN again
   let data;
   try {
     const first = document.documentElement.outerHTML;
     const more = await H.fetchMore(document.querySelector("a.morelink")?.getAttribute("href"), 9, (doc) => docs.push(doc));
     status.lastChild.textContent = "Cleaning and scoring…";
-    data = await H.send({ type: "thread", id, pages: [first, ...more] });
+    pagesHtml = [first, ...more];
+    data = await H.send({ type: "thread", id, pages: pagesHtml });
   } catch (e) {
     return H.fail(e.message, "thread");
     return;
@@ -51,6 +53,23 @@
     }
   }
   const byPath = new Map(rows.map((r) => [r.v.path, r]));
+  // One preview slot per link for the life of the page: redraws move it into the new card instead of
+  // building and fetching a new one each time (0.5 grew ~0.6 MB of page memory per redraw).
+  const slots = new Map();
+  const slotFor = (u, make) => {
+    const el = slots.get(u);
+    if (el && !el.dataset.dead) return el;
+    if (el) return null;
+    const fresh = make();
+    if (fresh) slots.set(u, fresh);
+    return fresh;
+  };
+  // Replies under each comment, counted once (0.5 counted them for every card on every redraw).
+  const replyCount = new Map();
+  for (const r of rows) {
+    const parts = String(r.v.path || "").split(".");
+    for (let i = 1; i < parts.length; i++) { const anc = parts.slice(0, i).join("."); replyCount.set(anc, (replyCount.get(anc) || 0) + 1); }
+  }
 
   // ---- story head ----
   const titleA = fat.querySelector(".titleline > a");
@@ -64,11 +83,11 @@
     h("div", { class: "h-meta" },
       voteBtn(storyVote),
       data.domain ? h("a", { href: `from?site=${encodeURIComponent(data.domain)}` }, data.domain) : null,
-      h("span", {}, `· ${data.points} points`),
-      data.author ? h("span", {}, "· by ", h("a", { href: `user?id=${encodeURIComponent(data.author)}` }, data.author)) : null,
-      sub?.querySelector(".age") ? h("span", {}, `· ${sub.querySelector(".age").textContent.trim()}`) : null,
-      h("span", {}, `· ${data.funnel.comments} comments`),
-      h("span", {}, `· thread relevance ${data.threadRelevance.toFixed(2)}`)),
+      h("span", {}, `${data.points} points`),
+      data.author ? h("span", {}, "by ", h("a", { href: `user?id=${encodeURIComponent(data.author)}` }, data.author)) : null,
+      sub?.querySelector(".age") ? h("span", {}, `${sub.querySelector(".age").textContent.trim()}`) : null,
+      h("span", {}, `${data.funnel.comments} comments`),
+      h("span", {}, `thread relevance ${data.threadRelevance.toFixed(2)}`)),
     top ? h("div", { class: "h-toptext" }, top.cloneNode(true)) : null,
     h("div", { class: "h-row" }, h("span", { class: "h-note" }, "This story:"), H.thumbs({ id, kind: "story", title: data.title, domain: data.domain, url: storyHref, threadId: id, points: data.points, author: data.author, excerpt: top?.textContent?.trim().slice(0, 300), tags: data.context?.tags || [] }, { pref: data.storyPref || null })),
     ui.previews !== false && /^https?:/i.test(storyHref) && !/news\.ycombinator\.com/.test(storyHref) ? H.previewSlot(storyHref, { ui, page: "thread", title: data.title, threadId: id, threadTitle: data.title }) : null);
@@ -123,7 +142,7 @@
     busy = true;
     H.fill(sumCard, h("div", { class: "h-loading", style: "padding:6px 0" }, h("span", { class: "h-spin" }), `Summarising with ${ui.model?.model || "your model"}…`));
     try {
-      const r = await H.send({ type: "summarise", id, providerId: ui.model?.providerId, model: ui.model?.model, force });
+      const r = await H.send({ type: "summarise", id, pages: pagesHtml, providerId: ui.model?.providerId, model: ui.model?.model, force });
       current = r;
       if (r.today) H.setUsage(r.today);
       drawSumResult();
@@ -309,7 +328,7 @@
     const why = h("div", { hidden: true }, H.whyPanel(v, ui.scoring));
     const whyBtn = h("button", { type: "button" }, "why this score");
     whyBtn.addEventListener("click", () => { why.hidden = !why.hidden; whyBtn.textContent = why.hidden ? "why this score" : "hide reasons"; });
-    const kids = opts.flat ? 0 : rows.filter((x) => x.v.path.startsWith(`${v.path}.`)).length;
+    const kids = opts.flat ? 0 : replyCount.get(v.path) || 0;
     const fold = kids ? h("button", { type: "button" }, collapsed.has(v.path) ? `show replies (${kids})` : `hide replies (${kids})`) : null;
     fold?.addEventListener("click", () => { collapsed.has(v.path) ? collapsed.delete(v.path) : collapsed.add(v.path); draw(); });
     const flags = [
@@ -347,7 +366,7 @@
         h("div", { class: "h-preview", title: "Expand" }, clip(textOf(r), 200)),
         h("div", { class: "h-cwrap" }, h("div", {},
           h("div", { class: "h-cbody" }, body(r)),
-          mode === "removed" || v.bucket === "removed" ? null : externalLinks(r).filter((u) => previewOwner.get(u) === r.id).slice(0, 2).map((u) => H.previewSlot(u, { ui, page: "thread", threadId: id, threadTitle: data.title, author: who })),
+          mode === "removed" || v.bucket === "removed" ? null : externalLinks(r).filter((u) => previewOwner.get(u) === r.id).slice(0, 2).map((u) => slotFor(u, () => H.previewSlot(u, { ui, page: "thread", threadId: id, threadTitle: data.title, author: who }))),
           v.tags.length ? h("div", { class: "h-row", style: "margin-bottom:6px" }, tagButtons(v.tags)) : null,
           why,
           h("div", { class: "h-cfoot" }, whyBtn, h("a", { href: reply }, "reply"), h("a", { href: `item?id=${r.id}` }, "link"), fold, dupBtn, h("span", { class: "h-grow" }),
@@ -446,6 +465,7 @@
     drawSubs();
     drawStrip();
     list.replaceChildren(...(view === "survivors" ? survivorsList() : treeList()));
+    H.pvSweep();
     const counts = { keep: 0, stretch: 0, maybe: 0, toss: 0, removed: 0 };
     for (const r of rows) counts[r.v.bucket]++;
     const label = { keep: "Keep", stretch: "Discover", maybe: "Maybe", toss: "Below floor", removed: "Removed" };
@@ -478,9 +498,15 @@
     e.preventDefault();
     if (e.key === "c") { const el = cards[cursor]; const r = el && byId.get(Number(el.dataset.cid)); if (r) toggle(r, el); return; }
     cards[cursor]?.classList.remove("h-current");
+    cards[cursor]?.removeAttribute("aria-current");
     cursor = Math.max(0, Math.min(cards.length - 1, cursor + (e.key === "j" ? 1 : -1)));
-    cards[cursor].classList.add("h-current");
-    cards[cursor].scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = cards[cursor];
+    el.classList.add("h-current");
+    el.setAttribute("aria-current", "true");
+    // Focus follows the highlight, so Tab continues from here and screen readers announce the comment.
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   });
 
   function jump(cid) {

@@ -2,7 +2,7 @@
 
 Everything on this page runs on your computer with no model. A model is called only for a thread summary you ask for, or to draft blocklist rules from your own words.
 
-## The 0 to 1 score (`hamsa.score/1`, rules v0.5)
+## The 0 to 1 score (`hamsa.score/1`, rules v0.6)
 
 Every story and every comment carries four things, never the number alone:
 
@@ -39,9 +39,9 @@ Ties within a bucket are broken by Hacker News' published gravity, `(points - 1)
 
 **Duplicate submissions**: the same link (host without `www.`, path without a trailing slash, tracking parameters such as `utm_*` removed; arXiv abs and pdf links treated as one; YouTube by video id), or titles sharing 3 or more words with an overlap of 0.6 or more. The best-voted submission leads, takes the best bucket of the group, and lists the others.
 
-A title fires a tag when every word of the tag's name is in the title, or when an anchor term and a second term of the tag both appear. Titles are scored on an absolute scale, so a story scores the same on any page.
+A title fires a tag when every word of the tag's name is in the title, or when an anchor term and a second term of the tag both appear. Words of one or two letters in a tag's name ("ai" in "ai safety", "ml", "ux") count too: "Warehouse safety rules" does not fire "ai safety", and a tag called "ml" fires on a title that says ML. Stop words ("of", "in") never count. Titles are scored on an absolute scale, so a story scores the same on any page.
 
-With no interests synced, every story sits in maybe with a note; nothing is ranked.
+With no interests synced, or no tag used often enough to score yet (see the relevance graph), every story sits in maybe with a note; nothing is ranked. The same holds on a thread: no comment is held back as off-topic.
 
 ### Discover (what you would not have known)
 
@@ -134,9 +134,27 @@ Rules 3 to 8 and `duplicate` are the crust and mark a comment `removed`. Rules 9
 ## Relevance graph (`hamsa.graph/1`)
 
 - Built from items with tags and text: Raindrop bookmarks (with highlights when switched on), browser bookmark folders (each folder on the path is a tag) and imported bookmark files. Stored as raw counts so each save updates it incrementally.
-- A tag fires on a comment only when one of its anchor terms (its own name, or a term found under at most three tags) appears together with at least one more of its recurring terms. Terms must recur in two or more items under the tag.
-- Tag weight favours specific tags: `ln(N / count) / ln(N)`, damped for tags used fewer than 4 times. Tags used fewer than 4 times are not scored.
-- Activation spreads along co-occurrence edges (40 percent of the neighbour's, capped). Muted tags subtract. Per-tag adjustments from feedback multiply the weight by `exp(adj)`, limited to +-2.
+- A tag fires on a comment only when one of its anchor terms (its own name, or a term found under at most three tags) appears together with at least one more of its recurring terms. Terms must recur in two or more items under the tag. Texts are matched through an index of anchor terms and name words, so only the tags a text shares such a word with are checked; the numbers are the same as checking every tag.
+- Tag weight favours specific tags and recent ones:
+
+  ```
+  weight   = max(0.02, specific x seen x recency x exp(adj))
+  specific = ln(N / count) / ln(N)            N = items in the graph (at least 2), count = items under the tag
+  seen     = min(1, ln(1 + count) / ln(4))    damps tags used once or twice
+  ```
+
+  Tags used fewer than 4 times (`minTagCount`) are not scored at all. "Tags in use" counts only the tags that can score.
+- **Recency** (rules 0.6): a tag you stopped using fades, but never below half its weight, so an old core interest is not erased.
+
+  ```
+  rc       = each dated bookmark under the tag counts 1, halved for every 365 days (halfLifeDays) it is older
+             than the tag's newest bookmark (kept as one number per tag, updated as you save)
+  recent   = rc x 2^(-(newest bookmark in the library - the tag's newest bookmark) / 365 days)
+  recency  = 0.5 + 0.5 x min(1, recent / min(3, count))
+  ```
+
+  In words: a tag keeps its full weight while about three of its bookmarks (or all of them, if it has fewer) are from the last year or so of your saving; a tag untouched for years drops to 0.5. Ages count back from your newest bookmark, not from today, so a library you have not added to for a while keeps its balance. Bookmarks without a date are left out of the count, and a tag with no dated bookmark is never faded. A graph saved before 0.6 has no `rc` and is not faded until the next sync. `halfLifeDays: 0` in the graph's `params` switches recency off. In simulation this lifted ranking quality (NDCG@10) by 0.05 to 0.10 for a reader whose interests move in phases and changed nothing for a steady reader.
+- Activation spreads along co-occurrence edges (40 percent of the neighbour's, capped). Muted tags subtract. Per-tag adjustments from feedback multiply the weight by `exp(adj)`: saving a point moves `adj` by 0.2 for its tags, a boost by 1 (a thumb sent as feedback by 0.3), limited to +-2. A stored adjustment that is not a number counts as 0.
 
 ## Interest profile (`hamsa.profile/1`)
 
@@ -194,4 +212,6 @@ The JSONL export has one object per line: for each story shown, `{ schema, id, t
 
 ## Storage keys
 
-`settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, previews, previewImages, provider choice), `providers`, `graph`, `profile`, `blocklist`, `dismissed`, `importedItems`, `raindropToken`, `cache` (summaries, 60 newest), `usage` (per model), `usageDaily` (per day, 60 days), `digest`, `karma` (user to karma and time), `readingLog`, `opened`, `impressions`, `errors` (the last 30 problems), `prefs`, `syncInfo`, `gist` (token, gist id; never synced), `pendingTeach`, `topics` (topic memory), `previews` (link previews).
+`storage.local` (small; Firefox sends its changes to every open HN tab, so nothing large or frequent lives here): `settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, previews, previewImages, provider choice), `providers`, `teach` (`{ adj, muted }`: what you taught the graph; synced and backed up), `profile`, `blocklist`, `dismissed`, `prefs`, `importedItems`, `raindropToken`, `usage` (per model), `usageDaily` (per day, 60 days), `errors` (the last 30 problems), `syncInfo`, `deviceId` (tells this browser's Firefox Sync pushes from others), `gist` (token, gist id; never synced), `hnLogin` (`{ user, pass, auto, status, at }`; never synced, backed up or exported).
+
+IndexedDB `hamsa`, store `kv` (background page only, written at most every 1.5 seconds): `graph` (`hamsa.graph/1`), `karma` (user to karma and time, at most 6000), `previews`, `impressions`, `readingLog`, `opened`, `cache` (summaries, 60 newest), `topics` (topic memory), `digest`. Data from 0.5 moves here on first start.

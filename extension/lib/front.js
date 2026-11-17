@@ -69,11 +69,12 @@ export function normUrl(url) {
     const host = u.hostname.replace(/^(www|m|mobile|amp)\./, "");
     let path = u.pathname.replace(/\/(index\.html?)?$/, "").replace(/\/amp$/, "");
     if (/arxiv\.org$/.test(host)) path = path.replace(/^\/(pdf|abs)\//, "/abs/").replace(/v\d+$/, "").replace(/\.pdf$/, "");
-    const keep = [...u.searchParams].filter(([k]) => !/^(utm_|ref$|ref_|source$|fbclid|gclid|mc_|s$|share)/i.test(k));
+    const keep = [...u.searchParams].filter(([k]) => !/^(utm_|ref$|ref_|source$|fbclid|gclid|mc_|s$|share$|share_|igshid|si$)/i.test(k));
     if (/youtube\.com$/.test(host)) return `youtube/${u.searchParams.get("v") || path}`;
     if (host === "youtu.be") return `youtube/${path.slice(1)}`;
     keep.sort();
-    return `${host}${path}${keep.length ? "?" + keep.map(([k, v]) => `${k}=${v}`).join("&") : ""}`.toLowerCase();
+    // Host names are case-free; paths and queries are not (bit.ly/AbCd is not bit.ly/abcd).
+    return `${host.toLowerCase()}${path}${keep.length ? "?" + keep.map(([k, v]) => `${k}=${v}`).join("&") : ""}`;
   } catch {
     return null;
   }

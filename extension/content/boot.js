@@ -5,7 +5,7 @@
   const api = globalThis.browser ?? globalThis.chrome;
   const root = document.documentElement;
   const path = location.pathname;
-  const layerPage = /^\/(|news|front|newest|best\w*|ask\w*|show\w*|item)$/.test(path);
+  const layerPage = /^\/(|news|front|newest|best|ask|asknew|show|shownew|item)$/.test(path); // not bestcomments
   if (layerPage) root.classList.add("hamsa-pending");
   const fallback = setTimeout(() => root.classList.remove("hamsa-pending"), 8000);
   const media = matchMedia("(prefers-color-scheme: dark)");
@@ -46,10 +46,39 @@
   }
   globalThis.HamsaTheme = { apply, current: () => last };
 
-  api.storage.local.get("settings").then(({ settings = {} }) => {
+  api.storage.local.get(["settings", "hnAuto"]).then(({ settings = {}, hnAuto }) => {
     apply(settings);
     if (settings.layer === false || !layerPage) { clearTimeout(fallback); root.classList.remove("hamsa-pending"); }
+    if (hnAuto?.auto) whenReady(() => autoLogin(hnAuto));
   }).catch(() => { clearTimeout(fallback); root.classList.remove("hamsa-pending"); });
+
+  function whenReady(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+    else fn();
+  }
+
+  // Automatic HN login (settings, Sources). When HN shows you logged out, the background hands this
+  // page your login and the page posts HN's own login form, as you would. Logging out by hand pauses it
+  // until you next log in yourself, so it never fights you.
+  function autoLogin(saved) {
+    const tell = (status) => api.runtime.sendMessage({ type: "hn-login-result", status }).catch(() => {});
+    const out = document.getElementById("logout");
+    if (out) out.addEventListener("click", () => tell("paused"), { once: true });
+    if (document.getElementById("me")) { if (saved.status && saved.status !== "ok") tell("ok"); return; }
+    if (!document.querySelector('.pagetop a[href^="login"]') || /^\/(login|logout|x)\b/.test(location.pathname)) return;
+    api.runtime.sendMessage({ type: "hn-login-ask" }).then(async (r) => {
+      if (!r?.go) return;
+      const post = globalThis.content?.fetch ? (...a) => globalThis.content.fetch(...a) : fetch;
+      let status = "error";
+      try {
+        const res = await post("https://news.ycombinator.com/login", { method: "POST", credentials: "include", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ goto: "news", acct: r.acct, pw: r.pw }).toString() });
+        const text = await res.text();
+        status = /id=['"]?(me|logout)\b/.test(text) ? "ok" : /recaptcha|validation required/i.test(text) ? "captcha" : /bad login/i.test(text) ? "bad" : "error";
+      } catch { /* offline */ }
+      await tell(status);
+      if (status === "ok") location.reload();
+    }).catch(() => {});
+  }
   media.addEventListener("change", () => apply());
   api.storage.onChanged.addListener((ch) => { if (ch.settings) apply(ch.settings.newValue || {}); });
 })();
