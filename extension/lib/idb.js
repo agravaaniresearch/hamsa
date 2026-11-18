@@ -7,7 +7,7 @@
 const DB_NAME = "hamsa", STORE = "kv", WRITE_DELAY = 1500;
 
 // The keys that live here. Everything else stays in storage.local.
-export const BIG_KEYS = ["graph", "karma", "previews", "impressions", "readingLog", "cache", "topics", "digest", "opened"];
+export const BIG_KEYS = ["graph", "karma", "previews", "impressions", "readingLog", "cache", "topics", "digest", "opened", "visits", "history", "health"];
 
 let dbp = null;
 function db() {
@@ -60,12 +60,22 @@ export function bigSet(key, value, { now = false } = {}) {
   return Promise.resolve();
 }
 
+// A rider is saved with every write and never causes one by itself (health counters use this).
+const riders = new Map();
+export function setRider(key, get) { riders.set(key, get); }
+export let onFlush = null;
+export function setOnFlush(fn) { onFlush = fn; }
+
 export async function flush() {
   clearTimeout(timer);
   if (!dirty.size) return;
   const keys = [...dirty];
   dirty.clear();
-  await tx("readwrite", (s) => { for (const k of keys) { const v = memo.get(k); if (v == null) s.delete(k); else s.put(v, k); } });
+  try { onFlush?.(keys); } catch { /* counting never blocks a write */ }
+  await tx("readwrite", (s) => {
+    for (const k of keys) { const v = memo.get(k); if (v == null) s.delete(k); else s.put(v, k); }
+    for (const [k, get] of riders) if (!keys.includes(k)) { const v = get(); if (v != null) s.put(v, k); }
+  });
 }
 
 // Moves the large keys out of storage.local the first time 0.6 runs. Safe to call on every start.

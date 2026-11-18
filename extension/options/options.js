@@ -152,10 +152,10 @@ async function checkPermission() {
 }
 
 // ---- interest sources ----
-const OPTIONAL = { bookmarks: "bookmarks", history: "history" };
+const OPTIONAL = { bookmarks: "bookmarks" };
 async function initSources() {
   const src = state.settings.sources;
-  for (const key of ["raindrop", "highlights", "hnfav", "bookmarks", "history"]) {
+  for (const key of ["raindrop", "highlights", "hnfav", "bookmarks"]) {
     const box = $(`src-${key}`);
     box.checked = !!src[key];
     box.addEventListener("change", async () => {
@@ -258,7 +258,6 @@ async function drawCounts() {
   set("n-raindrop", s.raindrop?.items);
   set("n-hnfav", s.hnfav?.items);
   set("n-bookmarks", s.bookmarks?.items);
-  set("n-history", s.history?.items);
   set("n-file", importedItems.length);
 }
 
@@ -477,8 +476,8 @@ async function drawStatus() {
   const set = (id, on, text, warn) => { const el = $(id); el.className = `stat${on ? " on" : warn ? " warn" : ""}`; el.lastChild.textContent = text; };
   set("st-interests", info.ready, info.ready ? `Interests: ${info.tags.toLocaleString()} topics` : "Interests: not synced yet", !info.ready);
   set("st-model", usable.length, usable.length ? `AI: ${usable[0].name}` : "AI summaries: off");
-  const syncOn = state.settings.syncFirefox || sync.gist?.id;
-  set("st-sync", syncOn, state.settings.syncFirefox && sync.gist?.id ? "Sync: Firefox and GitHub" : state.settings.syncFirefox ? "Sync: Firefox" : sync.gist?.id ? "Sync: GitHub" : "Sync: off");
+  const syncOn = state.settings.syncFirefox;
+  set("st-sync", syncOn, syncOn ? "Sync: Firefox" : "Sync: off");
   set("st-likes", likes.length, `${likes.filter((x) => x.v === "like").length} likes · ${likes.filter((x) => x.v === "dislike").length} dislikes`);
   const done = (id, ok) => $(id).classList.toggle("done", !!ok);
   done("ck-perm", perm); done("ck-src", info.ready); done("ck-ai", usable.length); done("ck-sync", syncOn || sync.backupAt);
@@ -538,11 +537,6 @@ async function initBackupSync() {
   const ffStatus = async () => {
     const i = await send({ type: "sync-info" }).catch(() => ({}));
     $("sync-firefox-status").textContent = i.firefoxPushedAt ? `Last sent ${new Date(i.firefoxPushedAt).toLocaleString()} (${((i.firefoxBytes || 0) / 1024).toFixed(0)} KB of about 100 KB allowed).` : state.settings.syncFirefox ? "On. Nothing sent yet." : "Off.";
-    const g = i.gist || {};
-    $("gist-status").textContent = g.id ? `Gist ${g.id.slice(0, 8)}…${g.pushedAt ? ` · pushed ${new Date(g.pushedAt).toLocaleString()}` : ""}${g.pulledAt ? ` · pulled ${new Date(g.pulledAt).toLocaleString()}` : ""}` : "Not set up.";
-    if (g.id && !$("gist-id").value) $("gist-id").value = g.id;
-    $("gist-auto").checked = !!g.auto; $("gist-keys").checked = !!g.includeKeys;
-    if (g.hasToken && !$("gist-token").value) $("gist-token").placeholder = "Token saved (hidden)";
   };
   ff.addEventListener("change", async () => {
     await patchSettings({ syncFirefox: ff.checked });
@@ -555,26 +549,51 @@ async function initBackupSync() {
     ffStatus();
   });
 
-  const gcfg = (patch) => send({ type: "gist-config", patch });
-  $("gist-eye").addEventListener("click", () => { const i = $("gist-token"); i.type = i.type === "password" ? "text" : "password"; $("gist-eye").textContent = i.type === "password" ? "Show" : "Hide"; });
-  $("gist-token").addEventListener("change", (e) => gcfg({ token: e.target.value.trim() }));
-  $("gist-id").addEventListener("change", (e) => gcfg({ id: e.target.value.trim().replace(/^.*\//, "") || undefined }));
-  $("gist-auto").addEventListener("change", (e) => gcfg({ auto: e.target.checked }));
-  $("gist-keys").addEventListener("change", (e) => gcfg({ includeKeys: e.target.checked }));
-  const askGithub = () => api.permissions.request({ origins: ["https://api.github.com/*", "https://gist.githubusercontent.com/*"] }).catch(() => false);
-  $("gist-push").addEventListener("click", async (e) => {
-    if (!(await askGithub())) return notify("warn", "Permission not given", "Hamsa needs to reach api.github.com to use a gist.");
-    e.target.disabled = true;
-    try { const r = await send({ type: "gist-push" }); notify("ok", "Pushed to GitHub", `Private gist ${r.id.slice(0, 8)}…, ${(r.bytes / 1024).toFixed(0)} KB.`); } catch (err) { notify("bad", "Push failed", err.message); }
-    e.target.disabled = false; ffStatus(); drawStatus();
-  });
-  $("gist-pull").addEventListener("click", async (e) => {
-    if (!(await askGithub())) return notify("warn", "Permission not given", "Hamsa needs to reach api.github.com to use a gist.");
-    e.target.disabled = true;
-    try { const r = await send({ type: "gist-pull" }); notify("ok", "Pulled from GitHub", `Merged ${r.merged.length} kinds of data.`); setTimeout(() => location.reload(), 1200); } catch (err) { notify("bad", "Pull failed", err.message); }
-    e.target.disabled = false;
-  });
   await ffStatus();
+}
+
+// ---- threads: HN history and strand kinds ----
+const KIND_NAMES = { debate: "Debate", experience: "Experience", explainer: "Explainer", alternatives: "Alternatives", stance: "Stance", meta: "Meta", discussion: "Discussion" };
+function initThreads() {
+  const hist = $("hn-history");
+  hist.checked = !!state.settings.hnHistory;
+  hist.addEventListener("change", async () => {
+    // Asked from the click, as Firefox requires; switched off, the permission is given back.
+    if (hist.checked) {
+      const ok = await api.permissions.request({ origins: ["https://hn.algolia.com/*"] }).catch(() => false);
+      if (!ok) { hist.checked = false; return notify("warn", "Permission not given", "HN history needs to read hn.algolia.com."); }
+    } else await api.permissions.remove({ origins: ["https://hn.algolia.com/*"] }).catch(() => {});
+    await patchSettings({ hnHistory: hist.checked });
+    notify("ok", hist.checked ? "HN history on" : "HN history off", hist.checked ? "Open any thread to see what came before it." : "");
+  });
+  const muted = new Set(state.settings.mutedKinds || []);
+  $("muted-kinds").replaceChildren(...Object.entries(KIND_NAMES).map(([k, name]) => {
+    const box = h("input", { type: "checkbox" });
+    box.checked = muted.has(k);
+    box.addEventListener("change", async () => { box.checked ? muted.add(k) : muted.delete(k); await patchSettings({ mutedKinds: [...muted] }); });
+    return h("label", { class: "check" }, box, ` ${name}`);
+  }));
+}
+
+// ---- health ----
+async function drawHealth() {
+  const r = await send({ type: "health" }).catch(() => null);
+  if (!r) return;
+  const kb = (b) => (b == null ? "unknown" : b < 1024 ? "under 1 KB" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`);
+  const STATUS = { healthy: "Healthy: Hamsa is light in this browser.", watch: "Watch: something is busier than it should be.", slow: "Slow: Hamsa is doing too much. See the causes below." };
+  const rows = [
+    ["Work per page (median, last 7 days)", r.pages.count ? `${r.pages.medianMs} ms over ${r.pages.count} pages; worst ${r.pages.worstMs} ms` : "No pages yet"],
+    ["Writes in the last hour", Object.entries(r.writesHour).map(([a, n]) => `${a === "idb" ? "IndexedDB" : "storage"} ${n}${r.bytesHour[a] ? ` (${kb(r.bytesHour[a])})` : ""}`).join(", ") || "None"],
+    ["Requests today", Object.entries(r.net).sort((a, b) => b[1].n - a[1].n).map(([host, x]) => `${host} ${x.n}${x.fail ? ` (${x.fail} failed)` : ""}`).join(", ") || "None"],
+    ["Background page woken today", `${r.wakesDay} times`],
+    ["Storage", `settings ${kb(r.storage.localBytes)}, everything ${kb(r.storage.totalBytes)}`],
+  ];
+  $("health").replaceChildren(
+    h("p", { class: `health ${r.status}` }, STATUS[r.status]),
+    h("table", { class: "kv" }, h("tbody", {}, rows.map(([k, v]) => h("tr", {}, h("th", {}, k), h("td", {}, v))))),
+    r.causes.length ? h("ul", { class: "hits" }, r.causes.map((c) => h("li", {}, `${c.what}. ${c.fix}`))) : null);
+  $("lightest").onclick = async () => { await send({ type: "lightest" }); await api.permissions.remove({ origins: ["https://hn.algolia.com/*", "<all_urls>"] }).catch(() => {}); notify("ok", "Lightest mode on", "Previews, karma and HN history are off; one front page is read."); state = await getState(); $("hn-history").checked = false; drawHealth(); };
+  $("health-reset").onclick = async () => { await send({ type: "health-reset" }); drawHealth(); };
 }
 
 async function renderErrors() {
@@ -605,6 +624,8 @@ async function init() {
   await refreshGraph();
   await drawLikes();
   await initBackupSync();
+  initThreads();
+  await drawHealth();
   $("version").textContent = api.runtime.getManifest().version;
   initNav();
   await drawStatus();

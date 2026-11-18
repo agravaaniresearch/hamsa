@@ -1,0 +1,88 @@
+{
+"hits": [
+{
+"objectID": "43773563",
+"title": "Launch HN: Cua (YC X25) \u2013 Open-Source Docker Container for Computer-Use Agents",
+"created_at_i": 1745423705,
+"num_comments": 73,
+"points": 172,
+"comment_text": null,
+"story_id": 43773563,
+"story_title": null,
+"author": "frabonacci",
+"url": "https://github.com/trycua/cua"
+},
+{
+"objectID": "48586299",
+"title": "Launch HN: TesterArmy (YC P26) \u2013 Agents that test web and mobile apps",
+"created_at_i": 1781794184,
+"num_comments": 69,
+"points": 132,
+"comment_text": null,
+"story_id": 48586299,
+"story_title": null,
+"author": "okwasniewski",
+"url": "https://tester.army"
+},
+{
+"objectID": "43710576",
+"title": "Show HN: Plandex v2 \u2013 open source AI coding agent for large projects and tasks",
+"created_at_i": 1744838802,
+"num_comments": 81,
+"points": 257,
+"comment_text": null,
+"story_id": 43710576,
+"story_title": null,
+"author": "danenania",
+"url": "https://github.com/plandex-ai/plandex"
+},
+{
+"objectID": "49157997",
+"title": "Launch HN: Hoplite (YC S26) \u2013 Effortlessly deploy cloud coding agents",
+"created_at_i": 1785774726,
+"num_comments": 70,
+"points": 81,
+"comment_text": null,
+"story_id": 49157997,
+"story_title": null,
+"author": "BenceRed",
+"url": "https://hoplite.sh"
+},
+{
+"objectID": "47720418",
+"title": "Launch HN: Twill.ai (YC S25) \u2013 Delegate to cloud agents, get back PRs",
+"created_at_i": 1775838133,
+"num_comments": 95,
+"points": 77,
+"comment_text": null,
+"story_id": 47720418,
+"story_title": null,
+"author": "danoandco",
+"url": "https://twill.ai"
+},
+{
+"objectID": "46846210",
+"title": "Show HN: Zuckerman \u2013 minimalist personal AI agent that self-edits its own code",
+"created_at_i": 1769953815,
+"num_comments": 51,
+"points": 71,
+"comment_text": null,
+"story_id": 46846210,
+"story_title": null,
+"author": "ddaniel10",
+"url": "https://github.com/zuckermanai/zuckerman"
+},
+{
+"objectID": "46993587",
+"title": "Show HN: Moltis \u2013 AI assistant with memory, tools, and self-extending skills",
+"created_at_i": 1770923721,
+"num_comments": 52,
+"points": 131,
+"comment_text": null,
+"story_id": 46993587,
+"story_title": null,
+"author": "fabienpenso",
+"url": "https://www.moltis.org"
+}
+]
+}

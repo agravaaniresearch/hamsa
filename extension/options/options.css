@@ -64,7 +64,7 @@ code { font: .9em var(--mono); background: var(--code-bg); padding: .1em .35em; 
 h3 { margin: 0 0 8px; font-size: 15px; }
 .hint, small { color: var(--muted); font-size: 12.5px; display: block; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; margin: 0 0 12px; box-shadow: var(--shadow); }
-.cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.cards2, .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .card.option { display: flex; flex-direction: column; gap: 10px; margin: 0; }
 .card.option h3 { margin: 0; }
 .otile { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--plum-bg); color: var(--plum); }
@@ -200,3 +200,12 @@ details.card > summary { font-weight: 600; color: var(--text); margin: 0; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .switch span, .switch span::after { transition: none; } }
 
 .linkbtn { border: 0; background: none; padding: 0; color: var(--accent, #a8326a); text-decoration: underline; cursor: pointer; font: inherit; }
+
+/* Health */
+.health { margin: 4px 0 12px; padding: 10px 14px; border-radius: 10px; font-weight: 600; }
+.health.healthy { background: var(--olive-bg); color: var(--olive); }
+.health.watch { background: var(--ochre-bg); color: var(--ochre); }
+.health.slow { background: var(--rust-bg); color: var(--rust); }
+table.kv { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.kv th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 12px 6px 0; width: 42%; vertical-align: top; }
+table.kv td { padding: 6px 0; }

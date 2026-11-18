@@ -30,13 +30,17 @@ To try the add-on unsigned: `npx web-ext run --source-dir extension` (Firefox De
 
 The manifest's `update_url` points to `updates.json` on `main`. Firefox checks it about once a day (or at once from `about:addons` → gear → *Check for Updates*) and installs the newer signed XPI, verified by its SHA-256 hash. Copies installed before 0.6 have no `update_url` and need 0.6 installed by hand once.
 
+## Permissions
+
+Always: `storage` and `unlimitedStorage` (so Firefox never evicts the tag graph), and the hosts `news.ycombinator.com` and `api.raindrop.io`. Author karma comes from HN's public API (`hacker-news.firebaseio.com`), which answers any site, so it needs no permission. Asked for only when you switch the feature on: `bookmarks` (browser bookmarks as interests), all sites (link previews), your AI provider's address (when you test a key), `hn.algolia.com` (HN history). Removed in 0.7: `history`, and GitHub hosts.
+
 ## Where data lives
 
 | Place | What | Synced or backed up |
 |---|---|---|
-| `storage.local` | settings, providers and keys, blocklist, likes (`prefs`), dismissals, `teach`, profile, usage, errors | settings, blocklist, likes, dismissals and teach (keys only if asked) |
+| `storage.local` | settings, providers and keys, blocklist, likes (`prefs`), dismissals, `teach`, profile, usage, errors | settings, blocklist, likes, dismissals and teach (keys only in a file backup, if asked) |
 | `storage.local` → `hnLogin` | HN user name and password for automatic login | never |
-| IndexedDB `hamsa` | tag graph, karma, previews, impressions, reading log, summaries, topics, digest, opened | reading log and opened in file and gist backups |
+| IndexedDB `hamsa` | tag graph, karma, previews, impressions, reading log, summaries, topics, digest, opened, visits, HN history, health counters | reading log and opened in file backups |
 
 ## Failure modes and what they look like
 
@@ -47,4 +51,6 @@ The manifest's `update_url` points to `updates.json` on `main`. Firefox checks i
 | HN rate limit (503) while reading extra pages | one retry, then fewer pages merged | the lede says how many pages were read |
 | HN captcha on automatic login | automatic login stops until you log in by hand once | Settings → Sources badge |
 | Provider key or model wrong | summary card shows the provider's error | Recent problems |
+| Algolia unreachable or rate-limited (HN history on) | no "Before this thread" panel; one error in Recent problems | Recent problems, Health (failed requests) |
+| Hamsa doing too much work | Health shows Watch or Slow with the cause | Settings, Health and activity |
 | Mozilla signing rejects a build | `scripts/release.mjs` stops with the validation messages; nothing is committed | terminal or Actions log |

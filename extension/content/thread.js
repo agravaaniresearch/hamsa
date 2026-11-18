@@ -2,6 +2,7 @@
 // into one line that says why; rebuttals deep in a chain stay, with the comment they answer.
 // The model is called only when you press Summarise, and the page shows what it was sent and cost.
 (async () => {
+  let T0 = performance.now();
   const H = globalThis.HamsaUI;
   const { h } = H;
   const id = Number(new URLSearchParams(location.search).get("id"));
@@ -36,6 +37,7 @@
     const more = await H.fetchMore(document.querySelector("a.morelink")?.getAttribute("href"), 9, (doc) => docs.push(doc));
     status.lastChild.textContent = "Cleaning and scoring…";
     pagesHtml = [first, ...more];
+    T0 = performance.now(); // Health: Hamsa's work from here to drawn (reading HN pages is not counted)
     data = await H.send({ type: "thread", id, pages: pagesHtml });
   } catch (e) {
     return H.fail(e.message, "thread");
@@ -180,7 +182,7 @@
     const r = current, s = r.summary;
     const relB = (x) => (x >= 0.55 ? "keep" : x >= 0.2 ? "maybe" : "toss");
     H.fill(sumCard, 
-      h("div", { class: "h-row", style: "justify-content:space-between" }, h("div", { class: "h-label" }, r.fromCache ? "Summary (saved copy, no new tokens used)" : "Summary"),
+      h("div", { class: "h-row", style: "justify-content:space-between" }, h("div", { class: "h-label" }, `${r.strandLabel ? `Summary of the strand "${r.strandLabel}"` : "Summary"}${r.fromCache ? " (saved copy, no new tokens used)" : ""}`),
         h("div", { class: "h-row" },
           h("span", { class: "h-tok", title: `Hamsa estimated ${H.fmtNum(r.estimateIn)} before the call` }, `sent ${H.fmtNum(r.usage.input)} tokens`),
           h("span", { class: "h-tok", title: "Reported by the provider" }, `received ${H.fmtNum(r.usage.output)} tokens`),
@@ -219,11 +221,17 @@
   const chips = h("div", { class: "h-row" });
   const controls = h("div", { class: "h-row" });
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const SUB = data.subtopics || { groups: [], byBranch: {} };
+  // Strands (lib/strands.js): the conversations inside the thread, each with a kind and a colour.
+  const SUB = data.strands || { groups: [], byBranch: {} };
   const subOf = (r) => SUB.byBranch[r.v.path.split(".")[0]] || null;
-  const subLabel = new Map(SUB.groups.map((g) => [g.id, g.label]));
-  let topic = null; // the sub-discussion shown, or all
-  const inTopic = (r) => !topic || subOf(r) === topic;
+  const strandOf = new Map(SUB.groups.map((g) => [g.id, g]));
+  const KIND = { debate: "Debate", experience: "Experience", explainer: "Explainer", alternatives: "Alternatives", stance: "Stance", meta: "Meta", discussion: "Discussion" };
+  // New since your last visit: HN comment ids only grow, so anything above the highest id you saw is new.
+  const lastMax = data.lastVisit?.max || 0;
+  const isNew = (r) => !!lastMax && r.id > lastMax;
+  let topic = null; // a strand id, "new", or null for everything
+  const inTopic = (r) => !topic || (topic === "new" ? isNew(r) : subOf(r) === topic);
+  const reading = () => topic && topic !== "other"; // the strand reader is open
   const subChips = h("div", { class: "h-row h-subs" });
   const discStrip = h("div");
 
@@ -338,6 +346,7 @@
       v.rule && v.bucket !== "removed" ? h("span", { class: "h-flag plain" }, `not sent: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       v.bucket === "removed" ? h("span", { class: "h-flag plain" }, `removed: ${RULES[v.rule]?.toLowerCase() || v.rule}`) : null,
       mode === "context" ? h("span", { class: "h-flag plain" }, "shown for context") : null,
+      isNew(r) ? h("span", { class: "h-flag new" }, "new since your last visit") : null,
     ];
     const reply = r.row.querySelector('a[href^="reply?"]')?.getAttribute("href") || `reply?id=${r.id}&goto=${encodeURIComponent(`item?id=${id}#${r.id}`)}`;
     // In the survivors view a reply says what it answers, and can show it.
@@ -356,7 +365,8 @@
     const isShut = shut.has(r.id);
     const tog = h("button", { class: "h-tog", type: "button", title: "Collapse or expand this comment (c)", "aria-expanded": String(!isShut) }, isShut ? "+" : "−");
     const indent = opts.flat ? 0 : Math.min(v.depth, 8) * 20;
-    const cls = ["h-c", v.stretch ? "h-cdisc" : "", !opts.flat && v.depth ? "h-indent" : "", opts.rebut ? "h-rebut" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : "", isShut ? "h-collapsed" : ""].join(" ");
+    const sk = strandOf.get(subOf(r))?.kind;
+    const cls = ["h-c", sk && sk !== "other" ? `k-${sk}` : "", v.stretch ? "h-cdisc" : "", !opts.flat && v.depth ? "h-indent" : "", opts.rebut ? "h-rebut" : "", mode === "context" ? "h-context" : "", mode === "removed" || v.bucket === "removed" ? "h-removed" : "", isShut ? "h-collapsed" : ""].join(" ");
     const el = h("div", { class: cls, id: `hamsa-c-${r.id}`, "data-cid": String(r.id), style: `margin-left:${indent}px;padding-left:${!opts.flat && v.depth ? 10 : opts.rebut ? 10 : 0}px` },
       h("div", { class: "h-card" },
         h("div", { class: "h-chead" },
@@ -430,7 +440,7 @@
       if (hiddenByCollapse(p)) continue;
       if (r.v.depth === 0 && !topic && SUB.groups.length) {
         const g = subOf(r);
-        if (g && g !== lastSub && g !== "other") { flush(); out.push(h("div", { class: "h-branch" }, h("span", { class: "h-label" }, "Sub-discussion"), h("strong", {}, subLabel.get(g)))); }
+        if (g && g !== lastSub && g !== "other") { const sg = strandOf.get(g); flush(); out.push(h("div", { class: `h-branch k-${sg.kind}` }, h("span", { class: "h-label" }, KIND[sg.kind] || "Strand"), h("strong", {}, sg.label))); }
         lastSub = g;
       }
       if (visible.has(p)) { flush(); out.push(card(r, forced.has(r.id) && !show[r.v.bucket] && !isProtected(r.v) ? "removed" : "normal")); }
@@ -457,14 +467,85 @@
         h("span", { class: "h-note" }, (r.v.reasons || []).filter((x) => x.kind === "discover" && x.points).map((x) => x.label).slice(0, 2).join(" · "))))));
   }
   function drawSubs() {
-    if (!SUB.groups.length) { subChips.replaceChildren(); return; }
-    const chip = (gid, text) => { const c = h("button", { class: "h-chip sub", type: "button", "aria-pressed": String(topic === gid) }, text); c.addEventListener("click", () => { topic = gid; cursor = -1; draw(); }); return c; };
-    subChips.replaceChildren(h("span", { class: "h-label" }, "Sub-discussions"), chip(null, "All"), ...SUB.groups.map((g) => chip(g.id, `${g.label} · ${g.count}`)));
+    const newCount = lastMax ? rows.filter((r) => isNew(r) && r.v.bucket !== "removed").length : 0;
+    if (!SUB.groups.length && !newCount) { subChips.replaceChildren(); return; }
+    const chip = (gid, text, kind) => {
+      const c = h("button", { class: `h-chip strand${kind ? ` k-${kind}` : ""}`, type: "button", "aria-pressed": String(topic === gid) }, text);
+      c.addEventListener("click", () => openStrand(gid));
+      return c;
+    };
+    subChips.replaceChildren(h("span", { class: "h-label" }, "Strands"), chip(null, "All"),
+      ...(newCount ? [chip("new", `New since your last visit · ${newCount}`, "new")] : []),
+      ...SUB.groups.map((g) => chip(g.id, g.id === "other" ? `Everything else · ${g.count}` : `${KIND[g.kind] || "Strand"} · ${g.label} · ${g.count}`, g.id === "other" ? null : g.kind)));
+  }
+  let logTimer = null;
+  const loggedStrands = new Set();
+  function openStrand(gid) {
+    topic = gid; cursor = -1; draw();
+    const g = strandOf.get(gid);
+    // Which strands you read is a sharper signal than "opened the thread": it goes in the reading log,
+    // once per strand per page and only if it stays open for three seconds (stepping through is not reading).
+    clearTimeout(logTimer);
+    if (g && gid !== "other" && !loggedStrands.has(gid)) logTimer = setTimeout(() => { if (topic !== gid) return; loggedStrands.add(gid); H.send({ type: "opened", entry: { kind: "strand", id, title: data.title, tags: [], strand: { kind: g.kind, label: g.label, terms: g.terms } } }).catch(() => {}); }, 3000);
+    window.scrollTo({ top: subChips.getBoundingClientRect().top + window.scrollY - 70, behavior: "auto" });
+  }
+  // The strand reader: every comment of one strand (or every new one) in thread order, each saying what it answers.
+  function readerList() {
+    const g = topic === "new" ? null : strandOf.get(topic);
+    const items = rows.filter((r) => inTopic(r) && r.v.bucket !== "removed");
+    const people = new Set(items.map(whoOf)).size;
+    const order = SUB.groups.filter((x) => x.id !== "other").map((x) => x.id);
+    const next = g ? order[(order.indexOf(g.id) + 1) % order.length] : order[0];
+    const earlier = h("div");
+    const btn = (text, fn) => h("button", { class: "h-btn", type: "button", onclick: fn }, text);
+    const head = h("section", { class: `h-strand${g ? ` k-${g.kind}` : " k-new"}` },
+      h("div", { class: "h-row" },
+        h("strong", { class: "h-strand-title" }, g ? `${KIND[g.kind] || "Strand"}: ${g.label}` : "New since your last visit"),
+        h("span", { class: "h-note" }, `${items.length} comments from ${people} people, in thread order`),
+        h("span", { class: "h-grow" }),
+        g ? H.badge(g.relevance >= (ui.scoring?.keepAt ?? 0.55) ? "keep" : g.relevance >= (ui.scoring?.maybeAt ?? 0.2) ? "maybe" : "toss", g.relevance) : null),
+      g ? h("div", { class: "h-note" }, `Why a strand: ${g.why.join("; ")}. Its words: ${g.terms.join(", ")}.`) : null,
+      h("div", { class: "h-row" },
+        g ? btn("Summarise this strand", () => summariseStrand(g)) : null,
+        btn("Copy as Markdown", async () => { await navigator.clipboard.writeText(strandMarkdown(g, items)); H.toast("Strand copied as Markdown"); }),
+        g ? btn("Earlier on HN", async (e) => { e.target.disabled = true; await drawEarlier(earlier, g); e.target.disabled = false; }) : null,
+        next && next !== topic ? btn("Next strand", () => openStrand(next)) : null,
+        btn("Back to all comments", () => openStrand(null)),
+        h("span", { class: "h-keys" }, h("kbd", {}, "["), " ", h("kbd", {}, "]"), " strands")),
+      earlier);
+    return [head, ...(items.length ? items.map((r) => card(r, "normal", { flat: true, replyTo: r.v.parent ? byPath.get(r.v.parent) : null })) : [h("div", { class: "h-note" }, "Nothing here.")])];
+  }
+  function strandMarkdown(g, items) {
+    const L = [`# ${data.title}`, "", `## ${g ? `${KIND[g.kind] || "Strand"}: ${g.label}` : "New since my last visit"}`, "", `Source: https://news.ycombinator.com/item?id=${id}`, ""];
+    for (const r of items) {
+      const p = r.v.parent ? byPath.get(r.v.parent) : null;
+      L.push(`**${whoOf(r)}**${p ? ` answering ${whoOf(p)}` : ""} ([link](https://news.ycombinator.com/item?id=${r.id}))`, "", textOf(r), "");
+    }
+    return L.join("\n");
+  }
+  async function summariseStrand(g) {
+    H.fill(sumCard, h("div", { class: "h-loading" }, h("span", { class: "h-spin" }), `Summarising the strand "${g.label}"…`));
+    sumCard.scrollIntoView({ block: "start" });
+    try {
+      const r = await H.send({ type: "summarise", id, pages: pagesHtml, providerId: ui.model?.providerId, model: ui.model?.model, strand: g.id });
+      if (r.error) throw new Error(r.error);
+      current = { ...r, strandLabel: g.label };
+      drawSumResult();
+    } catch (e) { drawSumIdle(e.message); }
+  }
+  async function drawEarlier(box, g) {
+    const r = await H.send({ type: "history-strand", id, strand: g.id, terms: g.terms }).catch((e) => ({ error: e.message }));
+    if (r.off) return H.fill(box, h("div", { class: "h-note" }, "Turn on HN history in settings (Threads) to see earlier comments on this strand."));
+    if (r.error) return H.fill(box, h("div", { class: "h-note" }, r.error));
+    H.fill(box, r.items.length ? r.items.map((c) => h("div", { class: "h-earlier" },
+      h("div", { class: "h-note" }, h("strong", {}, c.author || "someone"), ` on "${c.storyTitle}", ${new Date(c.at * 1000).toLocaleDateString()}`),
+      h("div", {}, c.excerpt),
+      h("a", { href: `item?id=${c.id}` }, "Open the comment"))) : h("div", { class: "h-note" }, "Nothing on this strand's words came close enough in earlier HN comments."));
   }
   function draw() {
     drawSubs();
     drawStrip();
-    list.replaceChildren(...(view === "survivors" ? survivorsList() : treeList()));
+    list.replaceChildren(...(reading() ? readerList() : view === "survivors" ? survivorsList() : treeList()));
     H.pvSweep();
     const counts = { keep: 0, stretch: 0, maybe: 0, toss: 0, removed: 0 };
     for (const r of rows) counts[r.v.bucket]++;
@@ -482,17 +563,25 @@
     sortSel.addEventListener("change", async () => { sort = sortSel.value; draw(); await H.send({ type: "set-ui", patch: { threadSort: sort } }).catch(() => {}); });
     const tossBtn = h("button", { class: "h-btn", type: "button", "aria-pressed": String(hideTossed), onclick: () => setTossed(!hideTossed) }, hideTossed ? "Show tossed folds" : "Collapse tossed threads");
     const all = (on) => { for (const el of list.querySelectorAll(".h-c[data-cid]")) { const r = byId.get(Number(el.dataset.cid)); if (r && shut.has(r.id) !== on) toggle(r, el); } };
+    controls.hidden = reading(); // Survivors, Tree and sorting do not apply inside the strand reader
     controls.replaceChildren(seg, view === "survivors" ? sortSel : tossBtn,
       h("button", { class: "h-btn ghost", type: "button", onclick: () => all(true) }, "Collapse all"),
       h("button", { class: "h-btn ghost", type: "button", onclick: () => all(false) }, "Expand all"),
       h("span", { class: "h-grow" }),
-      h("span", { class: "h-keys" }, h("kbd", {}, "j"), " ", h("kbd", {}, "k"), " move · ", h("kbd", {}, "c"), " collapse"));
+      h("span", { class: "h-keys" }, h("kbd", {}, "j"), " ", h("kbd", {}, "k"), " move · ", h("kbd", {}, "c"), " collapse · ", h("kbd", {}, "["), " ", h("kbd", {}, "]"), " strands"));
   }
 
   // j / k move between comments, c collapses the current one. Ignored while typing.
   let cursor = -1;
   document.addEventListener("keydown", (e) => {
     if (!document.documentElement.classList.contains("hamsa-on") || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("textarea, input, select, [contenteditable]")) return;
+    if (e.key === "[" || e.key === "]") {
+      const order = [null, ...SUB.groups.filter((g) => g.id !== "other").map((g) => g.id)];
+      if (order.length < 2) return;
+      e.preventDefault();
+      const i = Math.max(0, order.indexOf(topic));
+      return openStrand(order[(i + (e.key === "]" ? 1 : order.length - 1)) % order.length]);
+    }
     const cards = [...list.querySelectorAll(":scope > .h-c")];
     if (!cards.length || !["j", "k", "c"].includes(e.key)) return;
     e.preventDefault();
@@ -546,10 +635,25 @@
         h("div", { class: "h-note" }, `Each comment carries its 0 to 1 score, the reasons behind it, its bucket and the rules version (v${data.rules}), so a re-score later needs no new fetching. Depth never lowers a score.`))].filter(Boolean));
   }
 
+  // Before this thread (HN history, settings: Threads). Off by default; the panel stays away until it has something.
+  async function drawHistory() {
+    const r = await H.send({ type: "history", id }).catch(() => null);
+    if (!r || r.off || r.error || (!r.same.length && !r.similar.length)) return;
+    const row = (x) => h("div", { class: "h-hist" },
+      h("a", { href: `item?id=${x.id}` }, x.title),
+      h("div", { class: "h-note" }, `${x.year}, ${x.comments} comments${x.shared?.length ? `; shares ${x.shared.join(", ")}` : ""}${x.tags?.length ? `; your tags ${x.tags.join(", ")}` : ""}`));
+    side.prepend(h("section", { class: "h-panel" }, h("div", { class: "h-label" }, "Before this thread"),
+      r.same.length ? [h("div", { class: "h-note" }, "Same link"), r.same.map(row)] : null,
+      r.similar.length ? [h("div", { class: "h-note" }, "Similar threads"), r.similar.map(row)] : null,
+      h("div", { class: "h-note" }, "From the Algolia HN search, re-scored against this thread and your tags.")));
+  }
+
   status.replaceWith(head, sumCard, chips, subChips, controls, discStrip, list);
   current ? drawSumResult() : drawSumIdle();
   draw();
   drawSide();
+  drawHistory();
+  H.send({ type: "health-page", kind: "thread", ms: performance.now() - T0 - (data.waitMs || 0), bgMs: data.bgMs || 0 }).catch(() => {});
   if (location.hash && /^#\d+$/.test(location.hash)) jump(Number(location.hash.slice(1)));
   H.watch(ui, (s) => { ui.linkTarget = s.linkTarget; if (s.layer === false) location.reload(); });
 })().catch((e) => globalThis.HamsaUI?.fail(e?.message || String(e), "thread"));

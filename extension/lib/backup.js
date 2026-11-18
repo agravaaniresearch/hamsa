@@ -1,4 +1,4 @@
-// One open format for everything you set and taught Hamsa: a backup file, Firefox Sync and a GitHub gist
+// One open format for everything you set and taught Hamsa: a backup file and Firefox Sync
 // all carry the same JSON. API keys and tokens are left out unless you ask for them.
 //
 // { "schema": "hamsa.backup/1", "app_version": "0.4.0", "exported_at": "...", "includes_keys": false,

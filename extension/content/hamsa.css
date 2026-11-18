@@ -371,3 +371,25 @@ html[data-hamsa-width="full"] .h-wrap:has(.h-c) { max-width: 1380px; }
 /* Full-width front grid: actions stay on the meta line, so cards keep an even height. */
 html[data-hamsa-width="full"] .h-front-list .h-meta { flex-wrap: nowrap; overflow: hidden; }
 html[data-hamsa-width="full"] .h-front-list .h-meta > :not(.h-acts):not(.h-grow) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* 0.7 strands. One colour per kind, no blue: the pill, the stripe on each comment of the strand in the
+   tree, and the reader's frame all use it. */
+html.hamsa-on, html.hamsa-pending, html.hamsa-skin {
+  --k-debate: #a8326a; --k-experience: #36692c; --k-explainer: #7a5807; --k-alternatives: #9a3412; --k-stance: #6d3a8a; --k-meta: #5a645e; --k-discussion: #4d7419; --k-new: #a3261f;
+}
+html[data-hamsa-mode="dark"] {
+  --k-debate: #f28db9; --k-experience: #9fcf87; --k-explainer: #e5c06c; --k-alternatives: #ff9f6b; --k-stance: #c9a0dc; --k-meta: #98a49c; --k-discussion: #c2d98a; --k-new: #f0a39b;
+}
+.k-debate { --k: var(--k-debate); } .k-experience { --k: var(--k-experience); } .k-explainer { --k: var(--k-explainer); }
+.k-alternatives { --k: var(--k-alternatives); } .k-stance { --k: var(--k-stance); } .k-meta { --k: var(--k-meta); }
+.k-discussion { --k: var(--k-discussion); } .k-new { --k: var(--k-new); }
+#hamsa-root .h-chip.strand[class*=" k-"] { border-color: var(--k); }
+#hamsa-root .h-chip.strand[class*=" k-"][aria-pressed="true"] { background: var(--k); border-color: var(--k); color: var(--h-bg); }
+#hamsa-root .h-c[class*=" k-"] > .h-card { box-shadow: inset 3px 0 0 var(--k); }
+#hamsa-root .h-branch[class*=" k-"] .h-label { color: var(--k); }
+.h-strand { border: 1.5px solid var(--k); border-radius: 14px; background: var(--h-card); padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; margin-bottom: var(--h-gap); }
+.h-strand-title { font: 650 calc(var(--h-size) * 1.25)/1.25 var(--h-title); color: var(--k); }
+.h-earlier { border-left: 3px solid var(--k); padding: 4px 0 4px 12px; display: flex; flex-direction: column; gap: 4px; }
+.h-flag.new { color: var(--k-new); border-color: var(--k-new); }
+.h-hist { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-top: 1px solid var(--h-border); }
+.h-hist a { font-weight: 600; }

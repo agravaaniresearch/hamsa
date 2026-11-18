@@ -5,7 +5,7 @@ import { parseHTML } from "linkedom";
 import { scoreStories, SCORING_DEFAULTS } from "../extension/lib/score.js";
 import { parsePreview, quickPreview, slimPreview } from "../extension/lib/preview.js";
 import { emptyPrefs, setPref, reviewPref, dueLikes, likeScore, INTERVALS, linkId } from "../extension/lib/prefs.js";
-import { subDiscussions } from "../extension/lib/subtopics.js";
+import { buildStrands } from "../extension/lib/strands.js";
 import { mergePages, prepare, verdicts } from "../extension/lib/thread.js";
 import { TagGraph, buildState } from "../extension/lib/graph.js";
 
@@ -108,11 +108,11 @@ test("thread Discover marks substantial off-topic comments, with reasons", () =>
     assert.ok(x.reasons.some((r) => r.kind === "discover"));
     assert.ok(!x.reasons.some((r) => r.kind === "tag"));
   }
-  assert.ok(prep.subtopics && Array.isArray(prep.subtopics.groups));
+  assert.ok(prep.strands && Array.isArray(prep.strands.groups));
 });
 
-test("sub-discussions group branches that share their words", () => {
-  const c = (path, text) => ({ path, status: "ok", text });
+test("strands merge branches that share their words, and get a kind", () => {
+  const c = (path, text) => ({ path, status: "ok", text, author: `u${path}` });
   const comments = [
     c("1", "Battery chemistry matters: lithium iron phosphate cells last longer than nickel cells."), c("1.1", "Phosphate cells also handle heat better, lithium iron is safer."),
     c("2", "Lithium iron phosphate battery packs in cars are cheaper too."), c("2.1", "Phosphate battery cells are heavier per kilowatt hour."),
@@ -120,9 +120,12 @@ test("sub-discussions group branches that share their words", () => {
     c("4", "Repair shops cannot get the firmware without the licence."), c("4.1", "Right to repair laws would fix the firmware licence issue."),
     c("5", "Unrelated note about the weather in Lisbon this week."),
   ];
-  const out = subDiscussions(comments, { minComments: 3 });
+  const out = buildStrands(comments, { minComments: 3 });
   assert.ok(out.groups.length >= 2, JSON.stringify(out.groups));
   assert.equal(out.byBranch["1"], out.byBranch["2"]);
   assert.equal(out.byBranch["3"], out.byBranch["4"]);
   assert.notEqual(out.byBranch["1"], out.byBranch["3"]);
+  for (const g of out.groups) assert.ok(["debate", "experience", "explainer", "alternatives", "stance", "meta", "discussion", "other"].includes(g.kind));
+  const muted = buildStrands(comments, { minComments: 3, mutedKinds: out.groups.filter((g) => g.id !== "other").map((g) => g.kind) });
+  assert.equal(muted.groups.length, 0, "muting every kind leaves no strands");
 });

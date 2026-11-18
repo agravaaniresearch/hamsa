@@ -3,9 +3,9 @@
     "hamsa@agravaani": {
       "updates": [
         {
-          "version": "0.6.0",
-          "update_link": "https://raw.githubusercontent.com/agravaaniresearch/hamsa/main/releases/hamsa-0.6.0.xpi",
-          "update_hash": "sha256:d67e4c92e7eb6ab9b0daf95055124154378355fe3d5db3cc9cf399d6a7cdae66",
+          "version": "0.7.0",
+          "update_link": "https://raw.githubusercontent.com/agravaaniresearch/hamsa/main/releases/hamsa-0.7.0.xpi",
+          "update_hash": "sha256:cd9378b68f81d90db611f106c06eeed424737732938ceb6edcf3dc0c4d519658",
           "applications": {
             "gecko": {
               "strict_min_version": "140.0"

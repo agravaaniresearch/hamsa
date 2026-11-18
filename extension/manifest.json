@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hamsa",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Filters Hacker News before any model sees it. Merges the front pages, scores every story and comment against your own bookmarks and tags, folds away flame wars, and says why each item survived. Summaries only on request, with your own key.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -35,15 +35,15 @@
     "unlimitedStorage"
   ],
   "optional_permissions": [
-    "bookmarks",
-    "history"
+    "bookmarks"
   ],
   "host_permissions": [
     "https://news.ycombinator.com/*",
     "https://api.raindrop.io/*"
   ],
   "optional_host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://hn.algolia.com/*"
   ],
   "content_scripts": [
     {

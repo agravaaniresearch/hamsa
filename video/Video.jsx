@@ -33,8 +33,8 @@ function Title() {
   return (
     <AbsoluteFill style={{ background: C.milk, justifyContent: "center", alignItems: "center", flexDirection: "column", gap: 28 }}>
       <div style={rise(f, 0)}><Swan size={150} /></div>
-      <div style={{ ...rise(f, 8), fontFamily: "Lit", fontWeight: 600, fontSize: 120, color: C.ink, letterSpacing: -2 }}>Hamsa 0.6</div>
-      <div style={{ ...rise(f, 18), fontFamily: "Int", fontSize: 40, color: C.muted }}>Separating milk from water on Hacker News</div>
+      <div style={{ ...rise(f, 8), fontFamily: "Lit", fontWeight: 600, fontSize: 120, color: C.ink, letterSpacing: -2 }}>Hamsa 0.7</div>
+      <div style={{ ...rise(f, 18), fontFamily: "Int", fontSize: 40, color: C.muted }}>The conversations inside a thread, one at a time</div>
       <div style={{ ...rise(f, 26), width: interpolate(f, [26, 70], [0, 520], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: ease }), height: 6, borderRadius: 3, background: C.lotus }} />
     </AbsoluteFill>
   );
@@ -141,10 +141,27 @@ function Close() {
 }
 
 const T = 18; // transition length in frames
-export const SCENES = [[Title, 120], [Principles, 150], ["front", 180], [Heat, 150], ["thread", 180], ["dark", 150], [Lighter, 180], [Features, 180], ["wide", 150], [Close, 120]];
+function Surface() {
+  const f = useCurrentFrame();
+  const rows = [["Health", "Work per page, writes, requests per site: Healthy, Watch or Slow, with the fix"], ["Lightest mode", "Previews, karma and history off, and their permissions given back"], ["Removed", "GitHub gist backup and its token, browser history, front-page karma requests"], ["HN history", "Off until you switch it on; two cached requests per thread at most"]];
+  return (
+    <AbsoluteFill style={{ background: C.pond, justifyContent: "center", padding: "0 200px", gap: 40 }}>
+      <div style={{ ...rise(f, 0), fontFamily: "Lit", fontWeight: 600, fontSize: 70, color: C.pondText }}>Light in a production browser</div>
+      {rows.map(([a, b], i) => (
+        <div key={a} style={{ ...rise(f, 10 + i * 10), display: "flex", gap: 30, alignItems: "baseline", fontFamily: "Int", fontSize: 38 }}>
+          <span style={{ color: "#a6dc8a", fontWeight: 600, minWidth: 320 }}>{a}</span><span style={{ color: "#9daaa1" }}>{b}</span>
+        </div>
+      ))}
+    </AbsoluteFill>
+  );
+}
+
+export const SCENES = [[Title, 120], ["strands", 180], ["reader", 180], [Surface, 180], [Principles, 150], [Heat, 120], [Close, 120]];
 export const DURATION = SCENES.reduce((a, [, d]) => a + d, 0) - T * (SCENES.length - 1);
 
 const SHOTS = {
+  strands: { src: "strands.png", caption: "Strands: each conversation in the thread, by kind and colour.", dark: true, to: [1.08, -20, -40] },
+  reader: { src: "reader.png", caption: "Open one: three separate branches on sandboxing, read in thread order.", to: [1.12, -40, -160] },
   front: { src: "front.png", caption: "Discover leads: stories you would not have found, by HN's own signals." },
   thread: { src: "thread.png", caption: "689 comments, 147 sent to a model. Every cut names its rule.", to: [1.15, -60, -260] },
   dark: { src: "thread-dark.png", caption: "Pond: the dark theme. No blue anywhere.", dark: true },

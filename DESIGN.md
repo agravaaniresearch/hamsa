@@ -23,7 +23,7 @@ Hamsa is the swan said to separate milk from water (nira-kshira-viveka). It sepa
 
 The default is to scroll through what survives: keep, discover and maybe comments in one column, best first, each reply saying what it answers, and each rebuttal sitting directly under the comment it answers. Every comment folds to a line; j and k move, c collapses. The tree view is there to see the thread in place, with folds that say what was hidden and why, or with the tossed folds collapsed away.
 
-Threads read like a conversation: every person keeps one colour, quotes become blocks in the colour of the person quoted, and branches on the same subject are grouped into sub-discussions you can read one at a time. Links show a preview card, so you know what a link is before you leave the page.
+Threads read like a conversation: every person keeps one colour, quotes become blocks in the colour of the person quoted, and branches on the same subject become strands, each with a kind (debate, experience, explainer, alternatives, stance, meta) and a colour, which you can read one at a time in thread order. Links show a preview card, so you know what a link is before you leave the page.
 
 ## Buckets
 
@@ -63,7 +63,7 @@ One extension owns both the reading layout and the filtering (replacing Modern f
 - Rebuttal detection is keyword-based and will miss polite disagreement.
 - Karma and HN position stand in for comment votes, which HN does not publish.
 - HN favourites and upvotes are read from HN pages, which can change without notice.
-- Quote attribution searches only the comments above a quote, and sub-discussions are grouped by shared words, so both miss paraphrase.
+- Quote attribution searches only the comments above a quote, and strands are grouped by shared words with rule-based kinds, so both miss paraphrase and a kind is a best guess.
 - Link previews depend on what each site declares about itself; some sites block fetches or declare nothing.
 
 See SCHEMA.md for every rule, weight and file format.

@@ -142,3 +142,20 @@ test("a thumb on a story teaches its tags, and clearing it takes the lesson back
   const opened = await call({ type: "log-count" });
   assert.ok(opened.opened < 10, "a thumb is not logged as an open");
 });
+
+test("0.7: a second visit to a thread knows the last comment you saw; health reports and lightest mode", async () => {
+  const r1 = await call({ type: "thread", id: 50403507, pages: [thread1] });
+  assert.ok(r1.lastVisit && r1.lastVisit.max > 0, "the earlier test's visit is remembered");
+  assert.ok(r1.strands && Array.isArray(r1.strands.groups));
+  assert.ok(typeof r1.bgMs === "number");
+  await call({ type: "health-page", kind: "thread", ms: 200, bgMs: r1.bgMs });
+  const hr = await call({ type: "health" });
+  assert.ok(["healthy", "watch", "slow"].includes(hr.status));
+  assert.ok(hr.pages.count >= 1);
+  await call({ type: "lightest" });
+  const s = (await local.get("settings")).settings;
+  assert.equal(s.previews, false); assert.equal(s.karma, false); assert.equal(s.hnHistory, false); assert.equal(s.scoring.pages, 1);
+  assert.deepEqual(await call({ type: "history", id: 50403507 }), { off: true });
+  const sum = await call({ type: "summarise", id: 50403507, strand: r1.strands.groups[0]?.id || "s1" });
+  assert.match(sum.error, /provider|strand/i);
+});

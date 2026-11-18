@@ -27,7 +27,7 @@ score = 1 - exp(-2 * total / ceiling)
 | `tag` | Rare tag match / Broad tag match (rare = tag weight 0.45 or more) | 0.5 x tag weight x activation |
 | `near` | Near your tag (reached along a co-occurrence edge) | same formula; activation is already damped |
 | `domain` | Domain appears in your bookmarks (n) | 0.15 x min(1, log2(1 + n) / 4) |
-| `history` | You often read this site (3 or more visits) | 0.08 x min(1, log2(1 + visits) / 5) |
+| `history` | You often read this site (3 or more visits); from 0.7 there is no browser-history source, so this fires only on profiles synced before 0.7 | 0.08 x min(1, log2(1 + visits) / 5) |
 | `fav` | Like an HN favourite (2 or more shared title words, overlap 0.3 or more) | 0.15 |
 | `opened` | You open stories from this site (n) | 0.1 x min(1, log2(1 + n) / 3) |
 | `opened` | Like a story you opened (as for favourites) | 0.12 |
@@ -121,7 +121,16 @@ Rules 3 to 8 and `duplicate` are the crust and mark a comment `removed`. Rules 9
 
 **Discover in a thread**: comments at depth 0 to 2 with 40 or more words and no tag, near-tag, thread-topic or inherited reason. Quality = 0.35 x HN position (score / 1000) + 0.25 x karma (`log10(1 + k) / 5`) + 0.15 x replies (`log2(1 + replies) / 5`) + 0.10 x evidence + 0.15 x first-hand experience ("I worked on", "at my company", "in my experience", "we built"...). At 0.4 or more they compete; the best `stretchMax` (3) become `stretch`, are kept and sent, and list their reasons.
 
-**Sub-discussions**: each top-level comment and its replies is a branch. Each branch keeps its 8 most distinctive words (term frequency x `log(1 + branches / branches using it)`, dropping words in more than half the branches and vague words). Branches join greedily when they share 3 or more of those words or a Jaccard overlap of 0.2 or more. Groups with 6 or more comments (a single branch needs 12) are shown, up to 7, labelled by their three strongest words as people wrote them; the rest is "Everything else".
+**Strands** (`lib/strands.js`, 0.7): the conversations inside a thread.
+1. *Seeds*: each top-level comment and its replies is a branch.
+2. *Profiles*: each branch keeps its 12 most distinctive words, weighted term frequency x `log(1 + branches / branches using it)` (words in more than half the branches and vague words are dropped).
+3. *Merge*: branches join greedily, biggest first, when the cosine similarity of their profiles is 0.22 or more. Strands with 6 or more comments are shown (a single branch needs 12), up to 8; the rest is "Everything else".
+4. *Kind*: one text rule per kind (debate: quote blocks or disagreement words; experience: "I use", "we run", "in production"; explainer: over 700 characters with few replies, or explaining phrases; alternatives: "have you tried", "instead of", "switched to"; stance: "I don't use", "zero usage"; meta: about HN, the title or the submitter). The kind whose rule fires on the largest share of the strand's comments wins if that share is 20% or more; otherwise "discussion". Kinds you mute in settings are not shown as strands.
+5. *Relevance*: the mean of the comments' own 0 to 1 scores.
+
+Each strand record: `{ id, kind, label, terms, colour, branches, count, people, relevance, why, ids }`. A strand summary sends only that strand's comments that survived the crust rules (the interest floor and token budget do not apply) and is cached as `<thread id>:<strand id>`.
+
+**New since your last visit**: HN comment ids only grow, so Hamsa keeps, per thread, the highest comment id it has shown you (`visits`, 500 threads). On the next visit every comment with a higher id is new.
 
 **Quotes**: a paragraph starting with `>` becomes a quote block. Its source is the nearest comment above it whose text contains the quote's first 60 characters (letters and digits only), or the story text. Each author's colour is a fixed hash of their name into 8 bright colours.
 
@@ -158,7 +167,7 @@ Rules 3 to 8 and `duplicate` are the crust and mark a comment `removed`. Rules 9
 
 ## Interest profile (`hamsa.profile/1`)
 
-`{ domains, histDomains, fav, sources, built_at }`: sites you bookmarked (all sources), sites you read often (browser history, opt-in, last 90 days, never leaves the browser), and the titles of your HN favourites and upvoted stories as stemmed terms. `sources` records the item count and sync time for each source.
+`{ domains, histDomains, fav, sources, built_at }`: sites you bookmarked (all sources), sites you read often (from browser history before 0.7; the source was removed in 0.7 and this list is empty after the next sync), and the titles of your HN favourites and upvoted stories as stemmed terms. `sources` records the item count and sync time for each source.
 
 ## Blocklist (`hamsa.blocklist/1`)
 
@@ -190,7 +199,7 @@ No model is used.
 
 ## Reading log (`hamsa.reading/1`)
 
-Kept in this browser only, and off in settings if you prefer. `readingLog` holds up to 5000 opens: `{ at, kind: story | thread | link, id, title, url, domain, tags, score, bucket, rules, page, background }`. `opened` holds the derived signals: site counts, up to 400 opened titles as terms, and tag counts. `impressions` holds the last 3000 stories you were shown with what Hamsa scored.
+Kept in this browser only, and off in settings if you prefer. `readingLog` holds up to 5000 opens: `{ at, kind: story | thread | link | strand, id, title, url, domain, tags, score, bucket, rules, page, background, strand }`; for a strand you opened, `strand` is `{ kind, label, terms }`. `opened` holds the derived signals: site counts, up to 400 opened titles as terms, and tag counts. `impressions` holds the last 3000 stories you were shown with what Hamsa scored.
 
 The JSONL export has one object per line: for each story shown, `{ schema, id, title, url, domain, points, comments, tags, score, bucket, rules, first_seen, times_seen, opened, opened_story, opened_thread, dismissed }`, then one row for each opened link that was never on a front page. Shown-but-not-opened rows are the negatives a local model needs.
 
@@ -203,8 +212,31 @@ The JSONL export has one object per line: for each story shown, `{ schema, id, t
 `{ schema, app_version, exported_at, includes_keys, settings, blocklist, prefs, dismissed, opened, teach: { adj, muted }, providers: [{ name, kind, baseUrl, models, knownModels, apiKey? }], raindropToken?, reading_log?, impressions? }`. Keys appear only when asked for. Restoring merges: likes by item (newest wins, yours beat HN's), blocklist groups by name, dismissals and the reading log joined, providers by name and base URL (a local key is kept), topic boosts and mutes applied to the graph (or held until the next sync builds one). The provider and model chosen in this browser are never carried over.
 
 - **File**: the backup as one JSON file.
-- **Firefox Sync** (`storage.sync`): the backup without keys, reading log or impressions, cut into 7 KB items under `hamsa:0..n` with `hamsa:meta`; the oldest likes, opened titles and dismissals are trimmed until it fits 90 KB. Pushed 8 seconds after a change, pulled at start-up and whenever Firefox Sync brings a newer copy.
-- **GitHub**: `hamsa-backup.json` in a secret gist, through the GitHub API with your token (gist scope); pushed by hand or after changes, pulled by hand.
+- **Firefox Sync** (`storage.sync`): the backup without keys, reading log or impressions, cut into items of at most 7,800 bytes (UTF-8, as Firefox counts them) under `hamsa:0..n` with `hamsa:meta` (which carries this browser's `deviceId`, so its own push is not pulled back); the oldest likes, opened titles and dismissals are trimmed until it fits 95,000 bytes. Pushed 8 seconds after a change, pulled at start-up and whenever Firefox Sync brings a newer copy.
+
+## HN history (`hamsa.history/1`, off by default)
+
+Through the public Algolia HN Search API (`hn.algolia.com/api/v1`): read only, no key, no cookies, its own optional permission. Per thread:
+
+| Part | Request | Kept |
+|---|---|---|
+| Same link | stories whose url matches this story's url | 7 days |
+| Similar threads | stories with more than 50 comments matching up to 5 words: the title's distinctive words and the top word of the two largest strands | 1 day |
+| Earlier on HN | comments matching a strand's top 3 words, only when you press the button | 1 day |
+
+Re-score, because keyword search is noisy: `score = min(1, 0.18 x words shared with this thread + sum over your tags that fire of min(0.4, weight x activation))`. Similar threads and earlier comments under 0.2 are dropped; same-link results are always kept. At most 6 stories and 4 comments are shown. Text from Algolia is shown as plain text; links are rebuilt from ids.
+
+## Health (`hamsa.health/1`)
+
+Counted in the background page's memory and saved with other writes: the work per page (from the moment HN's pages are in hand to the page drawn, so network time is not counted; last 50 pages), writes per hour to storage and to IndexedDB, requests per host per day (and failures), and background wake-ups per day. Status:
+
+| | Watch from | Slow from |
+|---|---|---|
+| Work per page (median, 7 days) | 300 ms | 800 ms |
+| Writes per hour, either store | 60 | 240 |
+| Requests per host per day | 600 | 2000 |
+
+Each line crossed is shown with the switch that fixes it. Lightest mode sets previews off, karma off, HN history off and one front page.
 
 ## Link previews
 
@@ -212,6 +244,6 @@ The JSONL export has one object per line: for each story shown, `{ schema, id, t
 
 ## Storage keys
 
-`storage.local` (small; Firefox sends its changes to every open HN tab, so nothing large or frequent lives here): `settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, previews, previewImages, provider choice), `providers`, `teach` (`{ adj, muted }`: what you taught the graph; synced and backed up), `profile`, `blocklist`, `dismissed`, `prefs`, `importedItems`, `raindropToken`, `usage` (per model), `usageDaily` (per day, 60 days), `errors` (the last 30 problems), `syncInfo`, `deviceId` (tells this browser's Firefox Sync pushes from others), `gist` (token, gist id; never synced), `hnLogin` (`{ user, pass, auto, status, at }`; never synced, backed up or exported).
+`storage.local` (small; Firefox sends its changes to every open HN tab, so nothing large or frequent lives here): `settings` (theme and reading options, layer, order, scoring, sources, hnUser, gate, karma, linkTarget, threadView, threadSort, collapseTossed, readingLog, previews, previewImages, provider choice), `providers`, `teach` (`{ adj, muted }`: what you taught the graph; synced and backed up), `profile`, `blocklist`, `dismissed`, `prefs`, `importedItems`, `raindropToken`, `usage` (per model), `usageDaily` (per day, 60 days), `errors` (the last 30 problems), `syncInfo`, `deviceId` (tells this browser's Firefox Sync pushes from others), `hnLogin` (`{ user, pass, auto, status, at }`; never synced, backed up or exported), `hnAuto` (`{ auto, status }`: what HN pages read, without the password). Settings added in 0.7: `hnHistory`, `mutedKinds`.
 
-IndexedDB `hamsa`, store `kv` (background page only, written at most every 1.5 seconds): `graph` (`hamsa.graph/1`), `karma` (user to karma and time, at most 6000), `previews`, `impressions`, `readingLog`, `opened`, `cache` (summaries, 60 newest), `topics` (topic memory), `digest`. Data from 0.5 moves here on first start.
+IndexedDB `hamsa`, store `kv` (background page only, written at most every 1.5 seconds): `graph` (`hamsa.graph/1`), `karma` (user to karma and time, at most 6000; fetched on threads only), `previews`, `impressions`, `readingLog`, `opened`, `cache` (summaries, 60 newest), `topics` (topic memory), `digest`, `visits` (highest comment id seen per thread, 500 threads), `history` (HN history answers, 200 threads), `health` (counters). Data from 0.5 moves here on first start.

@@ -1,6 +1,7 @@
 // Hamsa on HN listing pages: several pages merged into one list, every story scored with no model,
 // sorted into keep, maybe, stretch and toss. Tossed stories are hidden but never deleted.
 (async () => {
+  let T0 = performance.now();
   const H = globalThis.HamsaUI;
   const { h, fill } = H;
   if (!document.getElementById("hnmain")) return H.release();
@@ -28,6 +29,7 @@
     const startMore = document.querySelector("a.morelink")?.getAttribute("href");
     const more = await H.fetchMore(startMore, want - 1, (_, i) => { status.lastChild.textContent = `Reading page ${i + 2} of ${want}…`; }, { cache: true });
     status.lastChild.textContent = "Scoring…";
+    T0 = performance.now(); // Health: Hamsa's work from here to drawn (reading HN pages is not counted)
     data = await H.send({ type: "front", pages: [first, ...more], path: location.pathname + location.search });
   } catch (e) {
     return H.fail(e.message, "front");
@@ -244,5 +246,6 @@
     h("p", { class: "h-lede" }, `${data.stories.length} stories from ${pagesRead} page${pagesRead > 1 ? "s" : ""} scored on this computer${data.verdicts.some((x) => x.dupOf) ? `, ${data.verdicts.filter((x) => x.dupOf).length} duplicate submissions merged` : ""}. No AI call was made for this view.`),
     banners, chips, list);
   draw();
+  H.send({ type: "health-page", kind: "front", ms: performance.now() - T0, bgMs: data.bgMs || 0 }).catch(() => {});
   H.watch(ui, (s) => { ui.linkTarget = s.linkTarget; if (s.layer === false) location.reload(); });
 })().catch((e) => globalThis.HamsaUI?.fail(e?.message || String(e), "front"));

@@ -4,7 +4,7 @@ Hamsa filters Hacker News before any model sees it. It is a Firefox add-on that 
 
 ![Front page in 0.6](docs/screenshots/front-0.6.png)
 
-A 47-second walkthrough of 0.6: [docs/hamsa-0.6.mp4](docs/hamsa-0.6.mp4) (made with Remotion; screens use synthetic interests and saved HN pages).
+A 32-second walkthrough of 0.7: [docs/hamsa-0.7.mp4](docs/hamsa-0.7.mp4); of 0.6: [docs/hamsa-0.6.mp4](docs/hamsa-0.6.mp4) (made with Remotion; screens use synthetic interests and saved HN pages).
 
 ## The idea
 
@@ -14,7 +14,7 @@ The hamsa, the swan of Indian tradition, is said to separate milk from water (*n
 2. **Nothing is deleted.** Every story and comment lands in a bucket (Discover, Keep, Maybe, Toss) with the reason it landed there, and can be shown again.
 3. **A score never travels without its reasons.** Tap any score to see each signal and its points.
 4. **What you would not have found yourself comes first.** Discover is reserved for stories outside your tags that HN's own signals say are worth a look.
-5. **Your sources, your keys, your browser.** Interests come from your Raindrop tags, browser bookmarks, HN favourites and, if you allow it, history. Nothing leaves the browser except the calls you make.
+5. **Your sources, your keys, your browser.** Interests come from your Raindrop tags, browser bookmarks and HN favourites. Nothing leaves the browser except the calls you make.
 6. **Light enough to forget.** No server, no account, no telemetry, no work at browser start.
 
 Hacker News is the test bed. The same engine is meant to run over journal feeds and PubMed next (see [ROADMAP.md](ROADMAP.md)).
@@ -23,16 +23,24 @@ Hacker News is the test bed. The same engine is meant to run over journal feeds 
 
 - **Front page**: pages 1 to 5 merged into one list, Discover first, then Keep and Maybe; Toss hidden behind a chip. Stories on one subject grouped as topics, marked new today or returning. Duplicate submissions merged. Flame wars (many comments on few points) left out.
 - **Threads**: crust removed by named rules (dead, heavily downvoted, insults, flame chains between two people, meta, quote-only, short), rebuttals protected, near-duplicate comments folded. Comments scored against your tags; off-topic ones stay on the page but are not sent to a model. A survivors-only scroll with rebuttals under what they answer, or the full tree; j and k move, c collapses.
-- **Conversation, readable**: one colour per person, quotes shown as blocks in the colour of the person quoted, sub-discussions you can read one at a time, link previews.
+- **Strands**: the conversations inside a thread, found by HN's own reply structure and shared words, each with a kind and a colour (debate, experience, explainer, alternatives, stance, meta). Open one to read all of it in thread order, summarise just that strand, copy it as Markdown, or step through strands with `[` and `]`.
+- **New since your last visit**: the comments that arrived since you last opened a thread, in one pill.
+- **Before this thread** (optional): earlier HN threads on the same link or subject, and earlier comments on a strand, from the public Algolia HN search, re-scored against your tags.
+- **Health**: how much work Hamsa does in your browser (work per page, writes, requests per site), with a one-click Lightest mode.
+- **Conversation, readable**: one colour per person, quotes shown as blocks in the colour of the person quoted, link previews.
 - **Summaries on request**, with any provider (OpenAI-compatible, Anthropic, Gemini, local Ollama or LM Studio); tokens sent and received and the cost on every card.
 - **Digest from your likes**: spaced review of what you liked (1, 3, 7, 16, 35, 90, 180 days) and today's stories that resemble it. No model.
 - **Learning**: thumbs, HN votes and what you open teach Hamsa, in this browser, straight away.
 - **Blocklist**: an open, shareable JSON file of topic groups, written by hand, drafted by a model from your words, or suggested from what you dismiss.
-- **Automatic HN login** (optional), **backup and sync** (file, Firefox Sync or a private gist), **self-updating** signed builds.
+- **Automatic HN login** (optional), **backup and sync** (file or Firefox Sync), **self-updating** signed builds.
 
-## What is new in 0.6
+## What is new in 0.7
 
-An independent review of 0.5, with QA in Firefox 160 and simulations of the relevance engine. In short: the same features, lighter and calibrated. On a 689-comment thread, CPU fell from 4.0 s to 2.4 s and scoring 600 comments from 1,008 ms to 131 ms with identical scores; large data moved out of the storage Firefox copies into every tab; thumbs now teach; interests fade slowly with age; 20 QA findings fixed. The full list is in [CHANGELOG.md](CHANGELOG.md).
+Strands replace word-only sub-discussions: each conversation in a thread gets a kind and a colour and can be read, summarised or copied on its own. Comments new since your last visit get their own pill. HN history (off until you switch it on) shows what HN said before. A Health panel shows how much work Hamsa does in your browser, with a Lightest mode. To keep the attack surface small, the GitHub gist backup and the browser-history interest source are gone, and author karma is no longer fetched on the front page. Details in [CHANGELOG.md](CHANGELOG.md).
+
+![A strand open in the reader](docs/screenshots/strand-reader-0.7.png)
+
+![Strand pills, dark theme](docs/screenshots/strands-dark-0.7.png)
 
 ## Install
 
@@ -44,7 +52,7 @@ From 0.6 on, Firefox updates Hamsa by itself (about once a day, or at once from 
 
 ## Screenshots
 
-**Thread**: what reaches the model, by rule, with sub-discussions and Discover comments.
+**Thread**: what reaches the model, by rule, with Discover comments.
 
 ![Thread](docs/screenshots/thread-0.6.png)
 
@@ -90,7 +98,7 @@ What runs and why: step 1 is `lib/graph.js` turning tags into weighted term list
 
 ## Layout
 
-- `extension/lib`: the engine and helpers: `graph` (tag relevance), `score` (the 0 to 1 score), `prune`, `parse`, `thread`, `front`, `cluster`, `subtopics`, `blocklist`, `profile`, `prefs`, `preview`, `backup`, `summarise`, `providers`, `pricing`, `raindrop`, `store`, `idb` (IndexedDB for large data)
+- `extension/lib`: the engine and helpers: `graph` (tag relevance), `score` (the 0 to 1 score), `prune`, `parse`, `thread`, `front`, `cluster`, `strands`, `history` (Algolia), `health`, `blocklist`, `profile`, `prefs`, `preview`, `backup`, `summarise`, `providers`, `pricing`, `raindrop`, `store`, `idb` (IndexedDB for large data)
 - `extension/background.js`: all network calls, scoring and state changes
 - `extension/content`: the in-page layer (`boot`, `common`, `front`, `thread`, `hamsa.css`, `skin.css`)
 - `extension/digest`, `extension/options`, `extension/shared`, `extension/fonts` (bundled, SIL OFL)
@@ -99,7 +107,7 @@ What runs and why: step 1 is `lib/graph.js` turning tags into weighted term list
 
 ## Privacy
 
-Hamsa runs only on news.ycombinator.com and talks only to HN, its public API (author karma), Raindrop (if you connect it), the AI provider you choose (only when you ask), GitHub (only for a gist backup you set up) and, if you allow previews, the pages that links point to. It keeps everything in this browser. The HN password for automatic login, if you give one, is never synced, exported or sent anywhere but HN.
+Hamsa runs only on news.ycombinator.com and talks only to HN, its public API (author karma, on threads), Raindrop (if you connect it), the AI provider you choose (only when you ask), the Algolia HN search (only if you switch on HN history) and, if you allow previews, the pages that links point to. It keeps everything in this browser. The HN password for automatic login, if you give one, is never synced, exported or sent anywhere but HN.
 
 ## Licence
 

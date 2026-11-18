@@ -59,7 +59,7 @@
       <a href="#s-score"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16V9M12 16V5M17 16v-4"/></svg><span>Scoring</span></a>
       <a href="#s-ai"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/></svg><span>AI summaries</span></a>
       <a href="#s-sync"><svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg><span>Backup and sync</span></a>
-      <a href="#s-activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>Activity</span></a>
+      <a href="#s-activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>Health and activity</span></a>
     </nav>
 
     <main class="content">
@@ -143,6 +143,12 @@
           </div>
           <small class="hint">More pages means more to choose from. Five pages is about 150 stories; you can also change it on the front page itself.</small>
         </div>
+        <div class="card">
+          <h3>Threads</h3>
+          <div class="field-row"><span><b>HN history</b><br><small class="hint">"Before this thread": earlier threads on the same link or subject, and earlier comments on a strand, from the public Algolia HN search. Read only, no account, no key. Firefox asks once for hn.algolia.com.</small></span><label class="switch"><input type="checkbox" id="hn-history"><span></span></label></div>
+          <p class="hint" style="margin-top:14px">Strand kinds to hide in every thread. Their comments stay in the tree.</p>
+          <div class="row" id="muted-kinds"></div>
+        </div>
       </section>
 
       <!-- ======================= INTERESTS ======================= -->
@@ -174,9 +180,6 @@
           </div>
           <div class="src">
             <div class="srchead"><label class="switch"><input type="checkbox" id="src-bookmarks"><span></span></label><div class="srcname"><strong>Browser bookmarks</strong><small>Folder names act as topics. Firefox asks once.</small></div><span id="n-bookmarks" class="badge"></span></div>
-          </div>
-          <div class="src">
-            <div class="srchead"><label class="switch"><input type="checkbox" id="src-history"><span></span></label><div class="srcname"><strong>Browser history</strong><small>Only which sites you visit often. Stays here.</small></div><span id="n-history" class="badge"></span></div>
           </div>
           <div class="src">
             <div class="srchead"><span class="filetile"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg></span><div class="srcname"><strong>A bookmarks file</strong><small>Exported from any browser, Pinboard or similar.</small></div><span id="n-file" class="badge"></span></div>
@@ -287,7 +290,7 @@
         <div class="sec-head"><span class="tile t-plum"><svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg></span><div><h2>Backup and sync</h2><p>Keep everything safe, and take it with you.</p></div></div>
         <div class="plain"><svg viewBox="0 0 80 60" aria-hidden="true"><path d="M22 44a11 11 0 0 1-1-22 14 14 0 0 1 27-3 10 10 0 0 1 9 25z" fill="#f6eaf2" stroke="#a8326a" stroke-width="2"/><rect x="6" y="46" width="22" height="10" rx="2" fill="#fbfcf9" stroke="#8fa596" stroke-width="1.5"/><rect x="52" y="46" width="22" height="10" rx="2" fill="#fbfcf9" stroke="#8fa596" stroke-width="1.5"/><path d="M17 46v-6M63 46v-6" stroke="#a8326a" stroke-width="2" stroke-dasharray="2 2"/></svg><p><b>In plain words:</b> your settings, likes, dislikes and blocklist can be saved as one file, or kept in step across your computers automatically. Your AI keys and tokens stay private unless you tick the box to include them.</p></div>
 
-        <div class="cards3">
+        <div class="cards2">
           <div class="card option">
             <span class="otile"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></svg></span>
             <h3>A backup file</h3>
@@ -304,23 +307,19 @@
             <div class="row"><button id="sync-firefox-now" class="secondary" type="button">Sync now</button></div>
             <small id="sync-firefox-status" class="status"></small>
           </div>
-          <div class="card option">
-            <span class="otile"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.8V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z" fill="currentColor" stroke="none"/></svg></span>
-            <h3>GitHub (private gist)</h3>
-            <p class="hint">Works anywhere: another browser, another machine. Needs a GitHub token with the <code>gist</code> permission.</p>
-            <div class="keyrow"><input id="gist-token" type="password" placeholder="GitHub token" autocomplete="off" spellcheck="false" aria-label="GitHub token"><button id="gist-eye" class="secondary eye" type="button">Show</button></div>
-            <input id="gist-id" type="text" placeholder="Gist id (optional)" aria-label="Gist id" autocomplete="off" spellcheck="false">
-            <label class="check"><input type="checkbox" id="gist-auto"> Push automatically after changes</label>
-            <label class="check"><input type="checkbox" id="gist-keys"> Include my keys and tokens</label>
-            <div class="row"><button id="gist-push" class="primary" type="button">Push</button><button id="gist-pull" class="secondary" type="button">Pull</button></div>
-            <small id="gist-status" class="status"></small>
-          </div>
         </div>
       </section>
 
       <!-- ======================= ACTIVITY ======================= -->
       <section class="sec" id="s-activity">
-        <div class="sec-head"><span class="tile t-rust"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><div><h2>Activity</h2><p>What the AI cost you, and anything that went wrong.</p></div></div>
+        <div class="sec-head"><span class="tile t-rust"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><div><h2>Activity</h2><p>Health, what the AI cost you, and anything that went wrong.</p></div></div>
+        <div class="card" id="health-card">
+          <h3>Health</h3>
+          <p class="hint">How much work Hamsa does in this browser, measured from Hamsa's side. Firefox's own total is in <code>about:processes</code>.</p>
+          <div id="health"></div>
+          <div class="row"><button id="lightest" class="secondary" type="button">Lightest mode</button><button id="health-reset" class="secondary" type="button">Reset counters</button></div>
+          <small class="hint">Lightest mode turns off link previews, author karma and HN history, and reads one front page.</small>
+        </div>
         <div class="card"><h3>AI usage</h3><div id="usage" class="tablewrap"></div></div>
         <div class="card">
           <h3>Recent problems</h3>

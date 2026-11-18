@@ -1,7 +1,10 @@
 // Background page: all network calls, all scoring and all state changes happen here. The pages on
 // Hacker News, the digest and the settings page only send messages, so keys never leave this origin.
 import { api, getState as readState, save, patchSettings, cacheGet, cachePut, addUsage, todayUsage, today } from "./lib/store.js";
-import { bigGet, bigSet, flush, migrateFromLocal, BIG_KEYS } from "./lib/idb.js";
+import { bigGet, bigSet, flush, migrateFromLocal, setRider, setOnFlush, BIG_KEYS } from "./lib/idb.js";
+import { renderThreadText } from "./lib/render.js";
+import * as hist from "./lib/history.js";
+import { emptyHealth, notePage, noteWrite, noteRequest, noteWake, report as healthReport } from "./lib/health.js";
 import { mergePages, prepare, verdicts as commentVerdicts, fetchPages } from "./lib/thread.js";
 import { TagGraph, buildState } from "./lib/graph.js";
 import { SUMMARY_SCHEMA, SYSTEM_PROMPT, buildUserMessage, interestsText, normalise } from "./lib/summarise.js";
@@ -29,10 +32,33 @@ function remember(id, entry) {
   prepared.set(id, entry);
   while (prepared.size > PREPARED_MAX) prepared.delete(prepared.keys().next().value);
 }
+let karmaWaitMs = 0, historyDownUntil = 0;
 let lastFront = null;        // the most recent front page from page 1 ({ stories, at, pages }), for the digest and blocklist tests
 
 // Large keys move out of storage.local into IndexedDB the first time 0.6 runs.
 const ready = migrateFromLocal(api.storage.local).catch((e) => { logError("migrate", e?.message || e); });
+
+// Removed in 0.7: the GitHub gist backup (its token) and the browser-history source. Clean up after them.
+ready.then(async () => {
+  const { gist, settings } = await api.storage.local.get(["gist", "settings"]);
+  if (gist) await api.storage.local.remove(["gist", "pendingTeach"]);
+  if (settings?.sources && "history" in settings.sources) { const { history: _gone, ...sources } = settings.sources; await patchSettings({ sources }); }
+  await api.permissions.remove({ origins: ["https://api.github.com/*", "https://gist.githubusercontent.com/*"], permissions: [] }).catch(() => {});
+}).catch(() => {});
+
+// ---- health (Settings, Health) ----
+// Counters in memory; saved only when something else is written to IndexedDB (the "rider").
+let healthMemo = null;
+const healthReady = ready.then(() => bigGet("health")).then((h) => { healthMemo = h?.v === 1 ? h : emptyHealth(); noteWake(healthMemo); setRider("health", () => healthMemo); }).catch(() => { healthMemo = emptyHealth(); });
+setOnFlush(() => H((h) => noteWrite(h, "idb", 0))); // counted, not sized: sizing would cost a serialisation
+const H = (fn) => { if (healthMemo) try { fn(healthMemo); } catch { /* never let counting break work */ } };
+// Every request the background makes is counted by host.
+const realFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = (url, opts) => {
+  let host = "other";
+  try { host = new URL(typeof url === "string" ? url : url.url).hostname; } catch { /* keep "other" */ }
+  return realFetch(url, opts).then((r) => { H((h) => noteRequest(h, host, r.ok)); return r; }, (e) => { H((h) => noteRequest(h, host, false)); throw e; });
+};
 
 // The interest profile changes only on sync; it is read once and kept in memory.
 let profileMemo;
@@ -59,6 +85,7 @@ async function loadGraph() {
 }
 api.storage.onChanged.addListener((ch, area) => {
   if (area !== "local") return;
+  H((h) => { for (const k of Object.keys(ch)) noteWrite(h, "local", k === "hnLogin" ? 0 : JSON.stringify(ch[k].newValue ?? null).length); });
   // Large keys written to storage.local by older code or a test move into IndexedDB as they arrive.
   if (BIG_KEYS.some((k) => ch[k]?.newValue != null)) migrateFromLocal(api.storage.local, { overwrite: true }).then((keys) => { if (keys.includes("graph")) { graphMemo = null; prepared.clear(); } }).catch(() => {});
   if (ch.profile) profileMemo = undefined;
@@ -83,7 +110,7 @@ async function loadPrefs() {
   return prefs?.items ? prefs : emptyPrefs();
 }
 
-async function scoreFront(state, stories, { karmaBudget = 0 } = {}) {
+async function scoreFront(state, stories) {
   const graph = await loadGraph();
   const opened = await bigGet("opened");
   // Stories you upvoted on HN count as likes (never over your own thumbs).
@@ -93,7 +120,8 @@ async function scoreFront(state, stories, { karmaBudget = 0 } = {}) {
     for (const st of voted) prefs = setPref(prefs, { id: st.id, kind: "story", title: st.title, domain: st.domain, url: st.url, threadId: st.id, points: st.points, author: st.by }, "like", "hn");
     await save({ prefs });
   }
-  const karma = state.settings.karma === false ? null : karmaBudget ? await karmaFor(stories.map((st) => st.by), karmaBudget, 40) : await karmaFor([], 0);
+  // Karma barely matters on the front page: only what is already cached is used, nothing is fetched.
+  const karma = state.settings.karma === false ? null : await karmaFor([], 0);
   const memory = await bigGet("topics", []);
   const day = today();
   const v = scoreStories(stories, { topics: memory.map((m) => ({ ...m, firstSeenToday: (m.firstDay || day) === day && (m.days || 1) <= 1 })),
@@ -139,7 +167,7 @@ async function doOpened({ entry }) {
   if (settings.readingLog === false || !entry) return { ok: true, logged: false };
   const readingLog = await bigGet("readingLog", []);
   const opened = (await bigGet("opened")) || emptyOpened();
-  const e = { at: Date.now(), kind: entry.kind, id: entry.id || null, title: String(entry.title || "").slice(0, 300), url: entry.url || null, domain: entry.domain || (entry.url ? domainOf(entry.url) : null), tags: (entry.tags || []).slice(0, 6), score: entry.score ?? null, bucket: entry.bucket || null, rules: RULES_VERSION, page: entry.page || null, background: !!entry.background };
+  const e = { at: Date.now(), kind: entry.kind, id: entry.id || null, title: String(entry.title || "").slice(0, 300), url: entry.url || null, domain: entry.domain || (entry.url ? domainOf(entry.url) : null), tags: (entry.tags || []).slice(0, 6), score: entry.score ?? null, bucket: entry.bucket || null, rules: RULES_VERSION, page: entry.page || null, background: !!entry.background, strand: entry.strand ? { kind: String(entry.strand.kind || ''), label: String(entry.strand.label || '').slice(0, 80), terms: (entry.strand.terms || []).slice(0, 6) } : null };
   readingLog.unshift(e);
   if (e.domain && e.kind !== "thread") opened.domains[e.domain] = (opened.domains[e.domain] || 0) + 1;
   for (const t of e.tags) opened.tags[t] = (opened.tags[t] || 0) + 1;
@@ -195,7 +223,7 @@ async function doFront({ pages, path = "/" }) {
   // Only the real front page, read from page 1, may stand in for the digest's own reading
   // (not /newest, /ask, /show, a past day or a later page).
   if (/^\/(news)?(\?p=1)?$/.test(path)) lastFront = { stories: merged.stories, at: Date.now(), pages: pages.length };
-  const { verdicts, ready, topics } = await scoreFront(state, merged.stories, { karmaBudget: 800 });
+  const { verdicts, ready, topics } = await scoreFront(state, merged.stories);
   if (state.settings.readingLog !== false) recordImpressions(merged.stories, verdicts).catch(() => {});
   const counts = { keep: 0, maybe: 0, stretch: 0, toss: 0 };
   for (const x of verdicts) counts[x.bucket]++;
@@ -215,7 +243,6 @@ function sourceStatus(state, graph) {
     { id: "raindrop", name: "Raindrop tags", on: s.raindrop && !!state.raindropToken, n: src.raindrop?.items },
     { id: "hnfav", name: "HN favourites", on: s.hnfav, n: src.hnfav?.items },
     { id: "bookmarks", name: "Browser bookmarks", on: s.bookmarks, n: src.bookmarks?.items },
-    { id: "history", name: "Browser history", on: s.history, n: src.history?.items },
     { id: "graph", name: "Tags in use", on: !!graph?.size, n: graph?.size || 0 },
   ];
 }
@@ -233,7 +260,7 @@ async function doDismiss({ story, undo }) {
 // ---- thread page ----
 // Author karma from HN's public API, cached for a week. Fetched within a time budget so a page never
 // waits long; whatever is still missing keeps loading and is used next time.
-const KARMA_TTL = 7 * 864e5, KARMA_MAX = 6000;
+const KARMA_TTL = 7 * 864e5, KARMA_MAX = 6000, VISITS_MAX = 500;
 let karmaMemo = null;
 async function karmaFor(users, budgetMs = 1200, max = 60) {
   if (!karmaMemo) karmaMemo = (await bigGet("karma")) || {};
@@ -264,8 +291,10 @@ async function analyse(id, pages) {
   const thread = mergePages(html, parseDoc);
   // Karma for at most 60 new authors per thread, top-level comments first: it is a small signal.
   const authors = thread.comments.filter((c) => c.status === "ok").sort((a, b) => (a.depth || 0) - (b.depth || 0)).map((c) => c.author);
+  const tk = performance.now();
   const karma = state.settings.karma === false ? null : await karmaFor(authors);
-  const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate, karma });
+  karmaWaitMs = Math.round(performance.now() - tk); // network waiting, not Hamsa's work (Health subtracts it)
+  const prep = prepare(thread, graph, { budgetTokens: state.settings.budgetTokens, scoring: state.settings.scoring, gate: state.settings.gate, karma, mutedKinds: state.settings.mutedKinds || [] });
   let prefs0 = null;
   const mine = thread.comments.filter((c) => c.my_vote);
   if (mine.length) prefs0 = await loadPrefs();
@@ -294,12 +323,19 @@ async function doThread({ id, pages }) {
   } catch { /* no provider yet */ }
   const cached = await cacheGet(id);
   const prefs = await loadPrefs();
+  // New since your last visit: HN comment ids only grow, so the highest id you saw is all we keep.
+  const visits = { ...(await bigGet("visits", {})) };
+  const lastVisit = visits[id] || null;
+  const maxId = thread.comments.reduce((m, c) => Math.max(m, c.id || 0), 0);
+  visits[id] = { max: Math.max(maxId, lastVisit?.max || 0), at: Date.now() };
+  const keepVisits = Object.entries(visits).sort((a, b) => b[1].at - a[1].at).slice(0, VISITS_MAX);
+  await bigSet("visits", Object.fromEntries(keepVisits));
   return {
     id, title: thread.story.title, domain: thread.story.link_domain, points: thread.story.points, author: thread.story.author,
     funnel: prep.funnel, dropped: { unavailable: stats.unavailable, ...stats.pruned }, tokens: prep.tokens, context: thread.story.context,
     storyPref: prefs.items[String(id)]?.v || null,
-    verdicts: commentVerdicts(thread), subtopics: prep.subtopics, prefs: Object.fromEntries(thread.comments.filter((c) => prefs.items[String(c.id)]?.kind === "comment").map((c) => [String(c.id), prefs.items[String(c.id)].v])), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
-    graphReady: !!graph?.size, estimate, model, rules: RULES_VERSION,
+    verdicts: commentVerdicts(thread), strands: prep.strands, prefs: Object.fromEntries(thread.comments.filter((c) => prefs.items[String(c.id)]?.kind === "comment").map((c) => [String(c.id), prefs.items[String(c.id)].v])), threadRelevance: Math.round(prep.threadRelevance * 100) / 100,
+    graphReady: !!graph?.size, estimate, model, rules: RULES_VERSION, lastVisit,
     cached: cached && cached.rules === RULES_VERSION ? { ...cached, fromCache: true } : null,
     usage: await todayUsage(),
   };
@@ -322,9 +358,10 @@ function annotate(summary, comments) {
   }
 }
 
-async function doSummarise({ id, pages, providerId, model, force }) {
+async function doSummarise({ id, pages, providerId, model, force, strand }) {
+  const key = strand ? `${id}:${strand}` : id;
   if (!force) {
-    const hit = await cacheGet(id);
+    const hit = await cacheGet(key);
     if (hit && hit.rules === RULES_VERSION) return { ...hit, fromCache: true };
   }
   const state = await getState();
@@ -334,20 +371,30 @@ async function doSummarise({ id, pages, providerId, model, force }) {
   const entry = prepared.get(id) || (await analyse(id, pages), prepared.get(id));
   const graph = await loadGraph();
   const interests = interestsText(graph, state.settings.extraInterests);
-  const user = buildUserMessage(entry.prep.threadText, interests);
-  const estimateIn = entry.prep.tokens + estimateTokens(SYSTEM_PROMPT + interests + JSON.stringify(SUMMARY_SCHEMA));
+  // A strand summary sends only that strand's comments (those that survived the crust rules).
+  let text = entry.prep.threadText, tokens = entry.prep.tokens, kept = entry.prep.result.kept;
+  if (strand) {
+    const s = entry.prep.strands.groups.find((g) => g.id === strand);
+    if (!s) throw new Error("That strand is not in this thread any more. Reload the page.");
+    const ids = new Set(s.ids);
+    kept = entry.thread.comments.filter((c) => ids.has(c.id) && (!c.dropped || c.dropped === "below_floor" || c.dropped === "budget"));
+    text = renderThreadText(entry.thread, kept, entry.prep.result.stats, entry.prep.result.config);
+    tokens = estimateTokens(text);
+  }
+  const user = buildUserMessage(text, interests);
+  const estimateIn = tokens + estimateTokens(SYSTEM_PROMPT + interests + JSON.stringify(SUMMARY_SCHEMA));
   const out = await completeJSON({ provider: p, model: m, system: SYSTEM_PROMPT, user, schema: SUMMARY_SCHEMA, maxTokens: state.settings.maxOutputTokens });
   const { summary, known, words, bad_refs } = normalise(out.object, entry.thread.comments);
   if (!summary.points.length && !summary.gist) throw new Error("The model returned an empty summary. Try again or choose another model.");
-  annotate(summary, entry.prep.result.kept);
+  annotate(summary, kept);
   const cost = estimateCost(m, out.usage.input, out.usage.output, { fx: state.settings.fx, overrides: state.settings.priceOverrides, baseUrl: p.baseUrl });
   await addUsage(p.name, m, out.usage.input, out.usage.output, cost.usd || 0);
   const result = {
     id, title: entry.thread.story.title, link: entry.thread.story.link_url, summary, ids: Object.fromEntries(known), words, bad_refs,
     provider: p.name, model: m, mode: out.mode, usage: out.usage, estimateIn, cost, rules: RULES_VERSION,
-    funnel: entry.prep.funnel, at: Date.now(),
+    funnel: entry.prep.funnel, at: Date.now(), strand: strand || null,
   };
-  await cachePut(id, result);
+  await cachePut(key, result);
   return { ...result, today: await todayUsage() };
 }
 
@@ -443,19 +490,12 @@ async function doSync() {
       if (!up.length) notes.push("Upvoted stories were not readable (log in to HN in this browser to include them).");
     }
   }
-  let history = [];
-  if (s.history) {
-    if (await api.permissions.contains({ permissions: ["history"] })) {
-      history = await api.history.search({ text: "", startTime: Date.now() - 90 * 864e5, maxResults: 5000 });
-      sources.history = { items: history.length, at: Date.now() };
-    } else notes.push("Browser history needs permission: switch the source off and on again.");
-  }
   const prev = await loadGraph();
   const gstate = buildState(items, { excluded: state.settings.excludedTags });
   if (prev) { gstate.adj = prev.state.adj; gstate.muted = prev.state.muted; } // keep what you taught it
   const { teach } = await api.storage.local.get("teach");
   if (teach && !prev) { gstate.adj = { ...(teach.adj || {}) }; gstate.muted = [...(teach.muted || [])]; }
-  const profile = buildProfile({ items, favourites, history, sources });
+  const profile = buildProfile({ items, favourites, sources });
   const g = new TagGraph(gstate);
   await saveGraph(g);
   await save({ profile, graphSyncedAt: Date.now() });
@@ -627,10 +667,7 @@ const handlers = {
   "backup-export": doBackupExport,
   "backup-import": doBackupImport,
   "sync-firefox-now": async () => { const pull = await firefoxPull(); const push = await firefoxPush(); return { pull, push, info: await syncState() }; },
-  "sync-info": async () => { const { gist = {} } = await api.storage.local.get("gist"); return { ...(await syncState()), gist: { id: gist.id || "", url: gist.url || "", pushedAt: gist.pushedAt, pulledAt: gist.pulledAt, auto: !!gist.auto, includeKeys: !!gist.includeKeys, hasToken: !!gist.token } }; },
-  "gist-config": async ({ patch }) => { const { gist = {} } = await api.storage.local.get("gist"); await api.storage.local.set({ gist: { ...gist, ...patch } }); return { ok: true }; },
-  "gist-push": gistPush,
-  "gist-pull": gistPull,
+  "sync-info": async () => syncState(),
   opened: doOpened,
   previews: doPreviews,
   review: doReview,
@@ -690,6 +727,73 @@ const handlers = {
     const l = await hnLogin();
     if (["ok", "bad", "captcha", "paused", "error"].includes(status)) await saveLogin({ ...l, status, at: status === "paused" ? l.at : Date.now() });
     return { ok: true };
+  },
+  // ---- health ----
+  // One batched write per page view keeps the counters (Firefox may unload the background soon after).
+  "health-page": async ({ kind, ms, bgMs }) => { await healthReady; H((h) => notePage(h, { kind, ms, bg: bgMs })); if (healthMemo) await bigSet("health", healthMemo); return { ok: true }; },
+  health: async () => {
+    await healthReady;
+    const local = await api.storage.local.get(null);
+    const localBytes = new TextEncoder().encode(JSON.stringify(local)).length;
+    const est = await navigator.storage?.estimate?.().catch(() => null);
+    return healthReport(healthMemo, { storage: { localBytes, totalBytes: est?.usage ?? null } });
+  },
+  "health-reset": async () => { healthMemo = emptyHealth(); await bigSet("health", healthMemo); return { ok: true }; },
+  // Lightest mode: everything optional that costs requests or work, off in one go.
+  lightest: async () => {
+    const { settings = {} } = await api.storage.local.get("settings");
+    await patchSettings({ previews: false, karma: false, hnHistory: false, scoring: { ...(settings.scoring || {}), pages: 1 } });
+    return { ok: true };
+  },
+  // ---- HN history (Algolia), only when switched on and permitted ----
+  history: async ({ id }) => {
+    const { settings = {} } = await api.storage.local.get("settings");
+    if (!settings.hnHistory) return { off: true };
+    if (!(await api.permissions.contains({ origins: ["https://hn.algolia.com/*"] }))) return { off: true, permission: true };
+    const entry = prepared.get(id);
+    if (!entry) return { error: "Open the thread again to look up its history." };
+    const all = { ...(await bigGet("history", {})) };
+    const cached = all[id];
+    const fresh = (part, ttl) => cached?.[part] && Date.now() - cached[part].at < ttl;
+    const story = { url: entry.thread.story.link_url, title: entry.thread.story.title };
+    const strands = entry.prep.strands.groups;
+    const terms = new Set([...tokenize(story.title), ...strands.flatMap((g) => g.terms.flatMap((t) => tokenize(t)))].filter((t) => t.length > 2));
+    const graph = await loadGraph();
+    const urls = hist.urls(story, strands);
+    const out = { ...(cached || {}) };
+    // If HN search was unreachable, wait an hour before trying again; the failure is logged once.
+    if (historyDownUntil > Date.now()) return { same: out.same?.items || [], similar: out.similar?.items || [], down: true };
+    const get = async (u) => { const r = await fetch(u, { credentials: "omit" }); if (!r.ok) throw new Error(`HN search returned ${r.status}.`); return r.json(); };
+    const [a, b] = await Promise.allSettled([
+      urls.same && !fresh("same", hist.HISTORY_TTL.same) ? get(urls.same) : null,
+      urls.similar && !fresh("similar", hist.HISTORY_TTL.similar) ? get(urls.similar) : null,
+    ]);
+    if (a.status === "fulfilled" && a.value) out.same = { at: Date.now(), items: hist.stories(a.value, { selfId: id, threadTerms: terms, graph, min: 0 }) };
+    if (b.status === "fulfilled" && b.value) out.similar = { at: Date.now(), items: hist.stories(b.value, { selfId: id, threadTerms: terms, graph }).filter((x) => !(out.same?.items || []).some((y) => y.id === x.id)) };
+    const failed = [a, b].find((x) => x.status === "rejected");
+    if (failed) { historyDownUntil = Date.now() + 3600e3; logError("history", `HN search unreachable: ${failed.reason?.message || failed.reason}`); }
+    all[id] = out;
+    const keep = Object.entries(all).sort((a, b) => (b[1].similar?.at || 0) - (a[1].similar?.at || 0)).slice(0, 200);
+    await bigSet("history", Object.fromEntries(keep));
+    return { same: out.same?.items || [], similar: out.similar?.items || [], query: hist.similarQuery(story.title, strands) };
+  },
+  // The page sends the strand's words, so this works after Firefox unloads the background page.
+  "history-strand": async ({ id, strand, terms: sent }) => {
+    const { settings = {} } = await api.storage.local.get("settings");
+    if (!settings.hnHistory || !(await api.permissions.contains({ origins: ["https://hn.algolia.com/*"] }))) return { off: true };
+    if (historyDownUntil > Date.now()) return { error: "HN search is unreachable at the moment. Hamsa will try again in an hour." };
+    const s = prepared.get(id)?.prep.strands.groups.find((g) => g.id === strand) || (Array.isArray(sent) && sent.length ? { terms: sent.slice(0, 6).map(String) } : null);
+    if (!s) return { error: "Open the thread again to look up this strand." };
+    const all = { ...(await bigGet("history", {})) };
+    const hit = all[id]?.strands?.[strand];
+    if (hit && Date.now() - hit.at < hist.HISTORY_TTL.strand) return { items: hit.items };
+    const r = await fetch(hist.strandUrl(s), { credentials: "omit" }).catch(() => null);
+    if (!r?.ok) { historyDownUntil = Date.now() + 3600e3; logError("history", `HN search unreachable (${r ? r.status : "no answer"})`); return { error: "HN search is unreachable at the moment. Hamsa will try again in an hour." }; }
+    const terms = new Set(s.terms.flatMap((t) => tokenize(t)));
+    const items = hist.comments(await r.json(), { selfId: id, threadTerms: terms, graph: await loadGraph() });
+    all[id] = { ...(all[id] || {}), strands: { ...(all[id]?.strands || {}), [strand]: { at: Date.now(), items } } };
+    await bigSet("history", all);
+    return { items };
   },
   "open-digest": async () => { await api.tabs.create({ url: api.runtime.getURL("digest/digest.html") }); return { ok: true }; },
 };
@@ -864,35 +968,6 @@ async function firefoxPull() {
   return { ok: true, merged: keys };
 }
 
-// GitHub: a private (secret) gist holding hamsa-backup.json. Works in any browser that can run Hamsa.
-const GIST_FILE = "hamsa-backup.json";
-async function gistReq(method, path, token, body) {
-  const res = await fetch(`https://api.github.com${path}`, { method, headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  if (res.status === 401) throw new Error("GitHub rejected the token. It needs the gist scope.");
-  if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
-  return res.json();
-}
-async function gistPush() {
-  const { gist = {} } = await api.storage.local.get("gist");
-  if (!gist.token) throw new Error("Add a GitHub token first.");
-  const content = JSON.stringify(makeBackup(await currentStore(), { version: VERSION, includeKeys: !!gist.includeKeys, includeLog: gist.includeLog !== false }), null, 1);
-  const body = { description: "Hamsa backup (settings, likes, blocklist)", files: { [GIST_FILE]: { content } } };
-  const j = gist.id ? await gistReq("PATCH", `/gists/${gist.id}`, gist.token, body) : await gistReq("POST", "/gists", gist.token, { ...body, public: false });
-  await api.storage.local.set({ gist: { ...gist, id: j.id, url: j.html_url, pushedAt: Date.now() } });
-  return { ok: true, id: j.id, url: j.html_url, bytes: content.length };
-}
-async function gistPull() {
-  const { gist = {} } = await api.storage.local.get("gist");
-  if (!gist.token || !gist.id) throw new Error("Add a GitHub token and gist id first (or push once to create the gist).");
-  const j = await gistReq("GET", `/gists/${gist.id}`, gist.token);
-  const f = j.files?.[GIST_FILE];
-  if (!f) throw new Error(`The gist has no ${GIST_FILE}.`);
-  const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
-  const keys = await applyMerge(mergeBackup(await currentStore(), readBackup(JSON.parse(text))));
-  await api.storage.local.set({ gist: { ...gist, pulledAt: Date.now() } });
-  return { ok: true, merged: keys };
-}
-
 // Push a little after anything worth syncing changes.
 const SYNCED = ["settings", "blocklist", "prefs", "dismissed", "teach"];
 api.storage.onChanged.addListener((ch, area) => {
@@ -903,9 +978,8 @@ api.storage.onChanged.addListener((ch, area) => {
 });
 async function settingsSync(dir) {
   try {
-    const { settings = {}, gist = {} } = await api.storage.local.get(["settings", "gist"]);
+    const { settings = {} } = await api.storage.local.get("settings");
     if (settings.syncFirefox) await (dir === "pull" ? firefoxPull() : firefoxPush());
-    if (dir === "push" && gist.auto && gist.token) await gistPush();
   } catch (e) { logError(`sync-${dir}`, e?.message || e); }
 }
 
@@ -922,7 +996,12 @@ handlers["errors-clear"] = async () => { await save({ errors: [] }); return { ok
 api.runtime.onMessage.addListener((msg, sender) => {
   const h = handlers[msg?.type];
   if (!h) return undefined;
-  return h(msg, sender).catch((e) => {
+  const t0 = performance.now();
+  return h(msg, sender).then((r) => {
+    // The page adds this to its own drawing time when it reports to Health.
+    if ((msg.type === "front" || msg.type === "thread") && r && typeof r === "object") { r.waitMs = msg.type === "thread" ? karmaWaitMs : 0; r.bgMs = Math.round(performance.now() - t0) - r.waitMs; karmaWaitMs = 0; }
+    return r;
+  }).catch((e) => {
     logError(msg.type, e?.message || e);
     return { error: e?.message || String(e) };
   });

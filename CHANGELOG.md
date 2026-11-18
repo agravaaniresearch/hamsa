@@ -2,6 +2,40 @@
 
 All notable changes to Hamsa. Versions follow the signed builds: the committed manifest carries major.minor.patch, and CI builds add the run number as the patch.
 
+## 0.7.0 (2026-11-18)
+
+Reading a thread well, while keeping Hamsa small and light in your production browser.
+
+### New
+- **Strands** replace sub-discussions. A strand is one conversation inside a thread: HN's own reply branches, merged when their distinctive words are similar (cosine of tf-idf profiles), so two separate arguments about the same thing become one strand. Each strand has a kind found by simple text rules (debate, experience, explainer, alternatives, stance, meta, or discussion) and the kind's colour, on its pill and as a stripe on every comment of the strand in the tree. On the 689-comment test thread, the sandboxing comments from three separate branches become one strand.
+- **The strand reader**: press a strand's pill to read all of it in thread order, each reply saying what it answers. From its header: **Summarise this strand** (sends only that strand), **Copy as Markdown** (author, what it answers, link, text), **Earlier on HN**, **Next strand**. `[` and `]` step through strands from anywhere on the page.
+- **Hide strand kinds** you never want (settings, Threads).
+- **New since your last visit**: one pill with the comments that arrived since you last opened the thread, and a flag on each. Hamsa keeps only the highest comment id it showed you, per thread.
+- **HN history** (settings, Threads; off by default): "Before this thread" lists earlier threads on the same link and similar threads; a strand's "Earlier on HN" lists earlier comments on its words. It uses the public Algolia HN search with its own permission, which Firefox asks for once and which is given back when you switch it off. Two requests per thread at most, cached; every result is re-scored against the thread and your tags, and weak matches are dropped.
+- **Health** (settings, Health and activity): work per page, writes per hour, requests per site per day and background wake-ups, measured from Hamsa's side with no timers or polling. Healthy, Watch or Slow, with the setting that fixes what crossed a line, and **Lightest mode**.
+- Strands you open are recorded in the reading log, a sharper signal for the learning planned in 0.8.
+
+### Removed, to keep the attack surface small
+- **GitHub gist backup**: it carried a GitHub token and overlapped with the backup file and Firefox Sync.
+- **Browser history as an interest source**, and with it the `history` permission.
+- **Author karma requests on the front page** (about 40 a load); karma already cached is still used, and threads still read it.
+
+### Measured (Firefox 160, QA round 3, against 0.6.0)
+- 689-comment thread: content-process CPU 1.48 s to 1.06 s, drawn in 1.45 s instead of 1.74 s; front page CPU 170 ms to 128 ms with no karma requests.
+- No memory growth over repeated redraws (0.1 MB over 20, from 12 MB in 0.6.0 measured the same way); stepping through strands 40 times leaves memory where it started.
+- A strand summary sent about 5,700 tokens where the whole thread sends about 31,000.
+
+### Fixed during QA
+- HN history waits an hour after HN search fails, logs it once, and says so plainly; the two lookups no longer depend on each other.
+- Health no longer counts waiting for author karma as Hamsa's work.
+- "Earlier on HN" works after Firefox unloads the background page.
+- Upgrading from 0.6 removes a saved GitHub token, the browser-history source and any GitHub permission.
+- Stepping through strands no longer floods the reading log (a strand is logged once per page, after three seconds open); Lightest mode also gives back the all-sites and HN history permissions.
+
+### For engineers
+- New modules: `lib/strands.js` (replaces `lib/subtopics.js`), `lib/history.js`, `lib/health.js`. New IndexedDB keys: `visits`, `history`, `health`. New settings: `hnHistory`, `mutedKinds`. Formulas and thresholds are in SCHEMA.md.
+- `test/v07.test.mjs`: strands on real threads (deterministic, merging, kinds), history parsing and re-scoring on saved Algolia answers, health thresholds; the background test covers visits, health, Lightest mode and strand summaries.
+
 ## 0.6.0 (2026-11-17)
 
 An independent review of 0.5: the same features, much lighter, with the bugs a QA pass found fixed, a calibrated relevance engine, automatic HN login and self-updating builds.

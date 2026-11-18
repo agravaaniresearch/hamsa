@@ -2,7 +2,7 @@
 // an HTML parser (DOMParser in the extension, linkedom in tests).
 import { parseThread, nextPageHref } from "./parse.js";
 import { prune } from "./prune.js";
-import { subDiscussions } from "./subtopics.js";
+import { buildStrands } from "./strands.js";
 import { renderThreadText } from "./render.js";
 import { estTokens } from "./config.js";
 
@@ -53,8 +53,8 @@ export function prepare(thread, graph, cfg = {}) {
   const abs = result.kept.map((c) => c.relevance?.abs ?? 0).sort((a, b) => b - a);
   const strong = abs.slice(0, 10);
   const threadRelevance = strong.length ? strong.reduce((s, v) => s + v, 0) / strong.length : 0;
-  const subtopics = subDiscussions(thread.comments);
-  return { result, threadText, tokens, threadRelevance, funnel: funnel(result.stats), subtopics };
+  const strands = buildStrands(thread.comments, { mutedKinds: cfg.mutedKinds || [] });
+  return { result, threadText, tokens, threadRelevance, funnel: funnel(result.stats), strands };
 }
 
 // 689 in -> after crust -> after tag match -> sent. The crust is everything except the interest floor and the budget.

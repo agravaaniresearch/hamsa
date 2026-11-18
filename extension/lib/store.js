@@ -22,7 +22,7 @@ export const PRESETS = [
   { name: "Custom (OpenAI-compatible)", kind: "openai", baseUrl: "" },
 ];
 
-export const DEFAULT_SOURCES = { raindrop: true, highlights: true, bookmarks: false, hnfav: false, history: false };
+export const DEFAULT_SOURCES = { raindrop: true, highlights: true, bookmarks: false, hnfav: false };
 
 export const DEFAULT_SETTINGS = {
   theme: "auto",
@@ -32,7 +32,9 @@ export const DEFAULT_SETTINGS = {
   sources: { ...DEFAULT_SOURCES },
   hnUser: "",              // read from the page when you are logged in
   gate: true,              // comments below the interest floor do not reach the model
-  karma: true,             // read author karma from HN's public API
+  karma: true,             // read author karma from HN's public API (threads only; never on the front page)
+  hnHistory: false,        // "Before this thread" through the Algolia HN API (needs its own permission)
+  mutedKinds: [],          // strand kinds hidden in every thread: debate | experience | explainer | alternatives | stance | meta | discussion
   readingLog: true,        // remember what you open (stays in this browser) and use it as a signal
   linkTarget: "same",      // same | new | background: where story links open
   threadView: "survivors", // survivors | tree
@@ -40,7 +42,7 @@ export const DEFAULT_SETTINGS = {
   collapseTossed: false,   // tree view: hide the folds of tossed and removed comments entirely
   titleFont: "system",     // system | inter | literata | source-serif | atkinson | plex-mono
   textSize: "m",           // s | m | l | xl
-  width: "normal",         // narrow | normal | wide
+  width: "normal",         // narrow | normal | wide | full
   justify: false,
   density: "comfortable",  // comfortable | compact
   darkStyle: "warm",       // warm | neutral | black
